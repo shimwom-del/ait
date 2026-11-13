@@ -45,7 +45,9 @@ jobs:
           node-version: 24
 
       - name: 테스트 (가짜 API)
-        run: node pipeline/test/run-mock-test.mjs
+        run: |
+          node pipeline/test/run-mock-test.mjs
+          node pipeline/test/run-points-test.mjs
 
       - name: 원본 캐시 복원
         uses: actions/cache/restore@v6
@@ -54,7 +56,7 @@ jobs:
           key: rtms-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: rtms-
 
-      # 단지 좌표(pipeline/apt-points.json)는 3단계에서 넣을 방법을 정해요. 없으면 좌표 없이 진행돼요.
+      # 단지 좌표는 저장소의 pipeline/apt-points.json 을 씀 (로컬에서 build-points.mjs 로 위치정보요약DB 에서 만듦)
 
       - name: 실거래 수집·집계
         env:

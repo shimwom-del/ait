@@ -3,3 +3,7 @@ node_modules/
 pipeline/cache/
 data/
 _site/
+
+# 위치정보요약DB 원본 (용량이 크고 원본 재배포 안 함)
+geo-src/
+*.zip

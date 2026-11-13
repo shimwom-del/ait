@@ -341,7 +341,9 @@ async function main() {
   // 오늘 이미 쓴 호출 수를 빼고 남은 만큼만
   const usage = await readJson(USAGE_PATH, {});
   const usedBefore = usage[today] || 0;
-  const maxCalls = Number(argValue("--max-calls")) || Infinity;
+  // --max-calls 0 은 '받지 않고 캐시로만 집계' (좌표 파일만 바꿨을 때 등)
+  const maxCallsArg = argValue("--max-calls");
+  const maxCalls = maxCallsArg !== undefined && /^\d+$/.test(maxCallsArg) ? Number(maxCallsArg) : Infinity;
   const budget = new CallBudget(Math.max(0, Math.min(maxCalls, DAILY_CALL_LIMIT - usedBefore)));
   const stats = { calls: 0, retries: 0, monthsFetched: 0, byReason: {}, failed: [], trades: 0, canceled: 0, complexes: 0, unmatched: [] };
 

@@ -8,7 +8,7 @@
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
-  :root{--blue:#3182F6;--blue-d:#1B64DA;--blue-l:#E8F3FF;--bg:#F2F4F6;--text:#191F28;--sub:#4E5968;--muted:#8B95A1;--line:#E5E8EB;--red:#F04452;--red-l:#FFEEEE;--green:#03B26C;--green-l:#E5F8EF;--amber:#C27803;--amber-l:#FFF6E0}
+  :root{--blue:#3182F6;--blue-d:#1B64DA;--blue-l:#E8F3FF;--bg:#F2F4F6;--text:#191F28;--sub:#4E5968;--muted:#8B95A1;--line:#E5E8EB;--red:#F04452;--red-l:#FFEEEE;--green:#03B26C;--green-l:#E5F8EF;--amber:#C27803;--amber-l:#FFF6E0;--orange:#E8590C}
   *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',-apple-system,sans-serif;-webkit-tap-highlight-color:transparent}
   body{background:#E5E8EB;color:var(--text)}
   button{border:none;background:none;cursor:pointer;color:inherit;font:inherit}
@@ -82,6 +82,14 @@
   .btn:hover{background:var(--blue-d)}
   .btn.gray{background:var(--bg);color:var(--text)}
   .btns{display:grid;grid-template-columns:1fr 2fr;gap:8px}
+  .btns.half{grid-template-columns:1fr 1fr}
+  .btns.three{grid-template-columns:auto auto 1fr}
+  .btns.three .btn{padding:16px 14px;white-space:nowrap}
+  .btns.three .btn.share{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:8px 14px;min-width:64px;font-size:13px}
+  .btn.withicon{display:flex;align-items:center;justify-content:center;gap:6px}
+  .btn .ico{flex:none}
+  .sharedline{margin:-4px 0 14px;padding:10px 12px;border-radius:12px;background:var(--blue-l);color:var(--sub);font-size:13px}
+  .sharedline .link{font-size:13px;font-weight:700}
   .hero{padding:4px 0 8px}
   .hero .tag{font-size:13px;font-weight:700;color:var(--muted)}
   .hero .big{font-size:26px;font-weight:800;line-height:1.38;margin-top:8px;letter-spacing:-.02em}
@@ -155,6 +163,12 @@
   .budget .echo{color:var(--text);font-weight:700}
   .mapbox .bcount{position:absolute;right:12px;top:12px;z-index:500;background:var(--blue);color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;box-shadow:0 1px 4px rgba(0,0,0,.12);pointer-events:none}
   .mapbox .bcount.zero{background:var(--sub)}
+  .pin.near b{background:var(--orange)}
+  .pin.near i{border-top-color:var(--orange)}
+  .pinlegend{display:flex;flex-wrap:wrap;gap:4px 12px;margin-top:8px;font-size:12px;color:var(--sub)}
+  .pinlegend[hidden]{display:none}
+  .pinlegend span{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+  .pinlegend i{width:10px;height:10px;border-radius:50%;flex:none}
   .pin.out b{background:#B0B8C1;font-size:0;padding:0;width:9px;height:9px;border-radius:50%;border:1.5px solid #fff;box-shadow:none}
   .pin.out i{display:none}
   .rc{position:absolute;left:0;top:0;transform:translate(-50%,-50%);background:rgba(49,130,246,.92);color:#fff;border:1.5px solid #fff;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:800;line-height:1.25;white-space:nowrap;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer}
@@ -162,6 +176,7 @@
   .listhead{font-size:13px;font-weight:700;color:var(--muted);margin-top:16px}
   .card .meta.ok b{color:var(--blue)}
   .card .meta.no b{color:var(--red)}
+  .card .meta.near b{color:var(--orange)}
   .datasrc{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;row-gap:2px;margin-top:12px;font-size:12px;color:var(--muted)}
   .datasrc .src2{flex-basis:100%}
 </style>
@@ -172,9 +187,13 @@
 // ===================== 설정 =====================
 // DATA_BASE: pipeline 결과 폴더 주소. index.json 과 complexes/{시군구코드}.json 을 여기서 받음 (비우면 샘플 데이터)
 // VWORLD_KEY: V-World 인증키 (지도 타일). 비우면 개발용 OSM 지도를 씀
+// APP_NAME: 앱인토스 콘솔에 등록한 appName (공유 딥링크 intoss://{APP_NAME}). 비우면 토스 공유 대신 웹 공유·링크 복사
+// SHARE_OG_IMAGE: 토스 공유 링크 미리보기 이미지 주소
 const CONFIG = {
   DATA_BASE: "https://shimwom-del.github.io/ait/data/",
-  VWORLD_KEY: ""
+  VWORLD_KEY: "",
+  APP_NAME: "",        // TODO: 앱인토스 appName
+  SHARE_OG_IMAGE: ""   // TODO: 앱 대표 이미지 주소
 };
 
 // 외부 데이터(단지 이름·주소 등)를 HTML에 넣을 때 사용
@@ -902,7 +921,8 @@ const S = {
   editing: null,
   open: { g1: false, g2: false, g3: false, g4: true },
   slots: { A: null, B: null },
-  askSlot: false
+  askSlot: false,
+  shared: false            // 공유받은 링크로 연 계산 (결과 화면 위 안내)
 };
 let E = null;              // 계산 엔진 입력 (calculateAllCosts 형식)
 let budget = 0;            // 단지를 바꿔도 유지
@@ -980,6 +1000,7 @@ function buildEngineState(d, a, options = {}) {
 // options 는 buildEngineState 와 같음. 예산 목록에서 들어오면 BUDGET_OPTIONS 로 같은 가정에서 시작함.
 function startDanji(id, areaIdx, options = {}) {
   S.danjiId = id;
+  S.shared = false;
   const d = danji();
   S.areaIdx = areaIdx ?? Math.max(0, d.areas.findIndex((a) => a.areaM2 === 84));
   if (options.persona) S.persona = options.persona;
@@ -1010,10 +1031,14 @@ function budgetTotals(d) {
   return t;
 }
 // 총액이 가장 낮은 면적이 대표. 그 면적이 예산 안이면 "예산 안 면적 중 최저"와 같음.
+// level: in(예산 안 · 파랑) | near(BUDGET_NEAR_GAP 이내로 모자람 · 주황) | out(더 모자람 · 회색)
+const BUDGET_NEAR_GAP = 1000; // 만 원
 function budgetMatch(d) {
   const t = budgetTotals(d);
   const best = t.reduce((m, x) => (x.total < m.total ? x : m), t[0]);
-  return { d, areaIdx: best.areaIdx, areaM2: best.areaM2, total: best.total, left: budget - best.total, ok: best.total <= budget };
+  const left = budget - best.total;
+  const level = left >= 0 ? "in" : left >= -BUDGET_NEAR_GAP ? "near" : "out";
+  return { d, areaIdx: best.areaIdx, areaM2: best.areaM2, total: best.total, left, ok: left >= 0, level };
 }
 
 // 홈 화면 예산은 천만 원 단위로 입력 (95 → 9억 5,000만 원). budget 변수와 계산은 지금처럼 만 원 단위
@@ -1047,6 +1072,7 @@ function applyBudget(v) {
 function go(screen) {
   S.screen = screen;
   S.editing = null;
+  if (screen === "home") S.shared = false;
   render();
   window.scrollTo(0, 0);
 }
@@ -1103,6 +1129,7 @@ const SCREENS = {
         <div class="assume"><b class="echo" id="budgetEcho">${budgetEchoText(budget)}</b><span id="budgetAssume">${budget > 0 ? BUDGET_ASSUMPTION : ""}</span></div>
       </div>
       <div class="mapbox" style="margin-top:12px"><div id="map"></div><span class="hint">핀을 누르면 바로 계산해요</span><span class="bcount" id="budgetCount" hidden></span></div>
+      <div class="pinlegend" id="pinLegend" hidden></div>
       <div class="datasrc">${dataSourceText()}</div>
       <input class="search" style="margin-top:14px" placeholder="동네나 단지명 (예: 강남구, 다산)" value="${esc(q)}" oninput="S.query=this.value;renderHomeList()" />
       <div id="homeList" style="margin-top:8px">${homeListHtml()}</div>
@@ -1221,6 +1248,7 @@ const SCREENS = {
     const diff = budget > 0 ? budget - c.grandTotal : null;
     const cash = Math.max(0, c.grandTotal - c.loanAmt);
     return `
+      ${S.shared ? `<div class="sharedline">공유받은 계산이에요 · <button class="link" onclick="go('price')">내 조건으로 바꿔보세요</button></div>` : ""}
       <div class="hero">
         <div class="tag">${esc(d.name)} · ${c.areaM2}㎡ · ${won(c.price)}</div>
         <div class="big">매매가 외에<br><em>${won(c.extraCostTotal)}</em>이 더 필요해요</div>
@@ -1257,8 +1285,9 @@ const SCREENS = {
 
       <p class="muted" style="margin-top:24px;line-height:1.6">모든 금액은 예상치예요. 1주택 기준 세율(2026년 지방세법)로 계산했고, 정확한 세금은 <a href="https://www.wetax.go.kr" target="_blank" rel="noopener" class="link">위택스</a>에서 확인하세요. 금액에 밑줄이 있으면 눌러서 고칠 수 있어요.</p>
 
-      <div class="cta"><div class="btns">
+      <div class="cta"><div class="btns three">
         <button class="btn gray" onclick="go('home')">다른 집</button>
+        <button class="btn gray share" onclick="shareResult()">${SHARE_ICON}<span>보내기</span></button>
         <button class="btn" onclick="saveToCompare()">비교함에 담기</button>
       </div></div>
     `;
@@ -1306,7 +1335,10 @@ const SCREENS = {
         }).join("")}
       </div>
       ${(a.acqTaxExcluded || b.acqTaxExcluded) ? `<div class="pill warn">다주택 조건으로 계산한 집은 취득세가 빠져 있어요.</div>` : ""}
-      <div class="cta"><button class="btn gray" onclick="go('home')">다른 집 담기</button></div>
+      <div class="cta"><div class="btns half">
+        <button class="btn gray" onclick="go('home')">다른 집 담기</button>
+        <button class="btn withicon" onclick="shareCompare()">${SHARE_ICON}<span>비교 보내기</span></button>
+      </div></div>
     `;
   }
 };
@@ -1425,9 +1457,13 @@ function drawRegionCircles(list) {
     badge.textContent = "확대하면 예산 안 단지를 보여드려요";
     badge.classList.add("zero");
   }
+  const legend = document.getElementById("pinLegend");
+  if (legend) legend.hidden = true; // 시군구 원에는 예산 색이 없음
 }
 
-// 예산이 없으면 평균가 핀, 있으면 예산 안은 입주 총액 핀 · 초과는 회색 점. 화면 안 단지만 그림
+// 예산이 없으면 평균가 핀. 있으면 색으로 먼저 판단: 예산 안 = 파랑 총액 핀, 1,000만 원 이내로 모자람 = 주황 총액 핀,
+// 더 모자람 = 회색 점. 화면 안 단지만 그림
+const PIN_COLORS = { in: "#3182F6", near: "#E8590C", out: "#B0B8C1" };
 function drawPins() {
   if (!mapObj || !pinLayer) return;
   pinLayer.clearLayers();
@@ -1436,20 +1472,21 @@ function drawPins() {
   const list = complexesInView();
   const on = budget > 0;
   const dots = list.length > DOT_MODE_MIN;
-  let inCount = 0;
+  let inCount = 0, nearCount = 0;
   list.forEach((d) => {
     let r = null;
-    if (on) { r = budgetMatch(d); if (r.ok) inCount++; }
-    const onClick = r?.ok ? () => startDanji(d.id, r.areaIdx, BUDGET_OPTIONS) : () => startDanji(d.id);
+    if (on) { r = budgetMatch(d); if (r.level === "in") inCount++; else if (r.level === "near") nearCount++; }
+    const onClick = r && r.level !== "out" ? () => startDanji(d.id, r.areaIdx, BUDGET_OPTIONS) : () => startDanji(d.id);
     if (dots) {
-      const color = !on || r.ok ? "#3182F6" : "#B0B8C1";
-      L.circleMarker([d.lat, d.lng], { renderer: dotRenderer, radius: on && !r.ok ? 3 : 5, color: "#fff", weight: 1, fillColor: color, fillOpacity: 1 })
+      const level = on ? r.level : "in";
+      L.circleMarker([d.lat, d.lng], { renderer: dotRenderer, radius: level === "out" ? 3 : 5, color: "#fff", weight: 1, fillColor: PIN_COLORS[level], fillOpacity: 1 })
         .addTo(pinLayer).on("click", onClick);
       return;
     }
     let html, z = 0;
     if (!on) { html = `<div class="pin"><b>${eok(repArea(d).avgPriceManwon)}</b><i></i></div>`; labeledPins.push(d); }
-    else if (r.ok) { html = `<div class="pin"><b>${eok1(r.total)}</b><i></i></div>`; labeledPins.push(d); z = 1000; }
+    else if (r.level === "in") { html = `<div class="pin"><b>${eok1(r.total)}</b><i></i></div>`; labeledPins.push(d); z = 1000; }
+    else if (r.level === "near") { html = `<div class="pin near"><b>${eok1(r.total)}</b><i></i></div>`; labeledPins.push(d); z = 500; }
     else { html = `<div class="pin out"><b></b></div>`; z = -1000; }
     const icon = L.divIcon({ className: "pin-wrap", iconSize: [0, 0], html });
     L.marker([d.lat, d.lng], { icon, title: d.name, zIndexOffset: z }).addTo(pinLayer).on("click", onClick);
@@ -1459,6 +1496,13 @@ function drawPins() {
     badge.hidden = !on;
     badge.textContent = `예산 안 ${inCount}곳`;
     badge.classList.toggle("zero", inCount === 0);
+  }
+  const legend = document.getElementById("pinLegend");
+  if (legend) {
+    legend.hidden = !on;
+    legend.innerHTML = on
+      ? `<span><i style="background:${PIN_COLORS.in}"></i>예산 안</span><span><i style="background:${PIN_COLORS.near}"></i>1,000만 원 이내 모자람${nearCount ? ` ${nearCount}곳` : ""}</span><span><i style="background:${PIN_COLORS.out}"></i>더 모자람</span>`
+      : "";
   }
   syncZoomClass();
 }
@@ -1536,7 +1580,7 @@ function budgetCard(r) {
   return `
     <button class="card" onclick="startDanji(${jsArg(r.d.id)}, ${r.areaIdx}, BUDGET_OPTIONS)">
       <div class="nm">${esc(r.d.name)}</div>
-      <div class="meta ${r.ok ? "ok" : "no"}">${r.areaM2}㎡ · 입주까지 ${won(r.total)} · <b>${r.ok ? `${won(gap)} 남음` : `${won(gap)} 모자라요`}</b></div>
+      <div class="meta ${r.level === "in" ? "ok" : r.level === "near" ? "near" : "no"}">${r.areaM2}㎡ · 입주까지 ${won(r.total)} · <b>${r.ok ? `${won(gap)} 남음` : `${won(gap)} 모자라요`}</b></div>
     </button>`;
 }
 
@@ -1656,14 +1700,18 @@ function setGrade(g) {
   render();
 }
 
-function repairLabel() {
-  if (E.repairOverrideEnabled) return "받은 견적";
-  if (S.preset) return PRESETS[S.preset].t;
-  const n = Object.values(E.repairItems).filter((i) => i.enabled).length;
+function repairLabelFor(e, preset) {
+  if (e.repairOverrideEnabled) return "받은 견적";
+  if (preset) return PRESETS[preset].t;
+  const n = Object.values(e.repairItems).filter((i) => i.enabled).length;
   return n ? `수리 ${n}곳` : "수리 안 함";
 }
+// 비교함 한 칸: 화면 표시용 계산 결과 + 공유 링크용 입력(share)
+function snapshotOf(d, e, ui) {
+  return { name: d.name, repairLabel: repairLabelFor(e, ui.preset), calc: calculateAllCosts(e), share: shareFields(d, e, ui) };
+}
 function snapshot() {
-  return { name: danji().name, repairLabel: repairLabel(), calc: calculateAllCosts(E) };
+  return snapshotOf(danji(), E, S);
 }
 function saveToCompare() {
   if (!S.slots.A) { S.slots.A = snapshot(); afterSave("A"); }
@@ -1690,8 +1738,210 @@ function slotSheet() {
     </div>`;
 }
 
+// ===================== 보내기 (결과·비교를 링크로) =====================
+// 링크에는 다시 계산하는 데 필요한 입력만 담음. 계산 결과 숫자와 예산(개인정보)은 넣지 않고,
+// 받은 쪽에서 buildEngineState → calculateAllCosts 로 다시 계산함.
+//   결과: ?v=1&i=단지id&r=시군구&m=면적&p=매매가&s=상황&l=대출&rp=수리항목&rg=고급자재&t=입주비용 켜기 …
+//   비교: ?v=1&A.i=…&A.m=…&B.i=…&B.m=… (두 집을 같은 필드에 A. / B. 접두어)
+const SHARE_VERSION = "1";
+// 순서가 곧 비트 위치라서 새 항목은 맨 뒤에만 추가할 것 (이미 보낸 링크와 호환)
+const SHARE_REPAIR_KEYS = ["wallpaper", "flooring", "sink", "bathroom", "lighting", "closet", "grout", "sash", "door", "middleDoor", "boiler", "entrance", "systemAc", "interiorFilm"];
+const SHARE_PERSONAS = ["first", "noFirst", "one", "multi"];
+const SHARE_TOGGLES = ["brokerVatEnabled", "movingFeeEnabled", "airconFeeEnabled", "furnitureEnabled", "storageMoveEnabled"];
+const SHARE_AMOUNTS = { md: "mgmtDepositAmount", cf: "cleaningFeeAmount", mf: "movingFeeAmount", af: "airconFeeAmount", ff: "furnitureAmount", sf: "storageMoveAmount" };
+const SHARE_TAIL = "이 집 얼마 들어?";
+
+const bits = (keys, test) => keys.reduce((n, k, i) => (test(k) ? n | (1 << i) : n), 0).toString(36);
+const hasBit = (b36, i) => ((parseInt(b36, 36) || 0) >> i) & 1;
+const shareNum = (v) => { const n = Number(v); return v !== undefined && v !== "" && Number.isFinite(n) && n >= 0 ? n : null; };
+
+// 지금 입력(e)과 화면 선택(ui: persona·preset)을 링크 필드로. 기본값과 같은 금액은 넣지 않음
+function shareFields(d, e, ui) {
+  const a = d.areas.find((x) => x.areaM2 === e.activeAreaM2) || d.areas[0];
+  const base = buildEngineState(d, a, { persona: ui.persona, preset: ui.preset || undefined });
+  const f = { i: d.id, m: e.activeAreaM2, p: e.purchasePriceManwon, s: Math.max(0, SHARE_PERSONAS.indexOf(ui.persona)) };
+  if (d.lawdCd) f.r = d.lawdCd;
+  if (ui.preset) f.pr = ui.preset;
+  if (e.hasLoan) f.l = e.loanAmountManwon;
+  f.rp = bits(SHARE_REPAIR_KEYS, (k) => e.repairItems[k]?.enabled);
+  f.rg = bits(SHARE_REPAIR_KEYS, (k) => e.repairItems[k]?.grade === "premium");
+  const bath = e.repairItems.bathroom?.count;
+  if (bath && bath !== 2) f.bc = bath;
+  if (e.repairOverrideEnabled) f.q = e.repairOverrideAmount;
+  f.t = bits(SHARE_TOGGLES, (k) => e[k]);
+  if (e.customBrokerFeeManwon !== null) f.bf = e.customBrokerFeeManwon;
+  if (e.customRegFeeManwon !== null) f.rf = e.customRegFeeManwon;
+  for (const [code, key] of Object.entries(SHARE_AMOUNTS)) if (e[key] !== base[key]) f[code] = e[key];
+  return f;
+}
+
+function shareQuery(homes) {
+  const sp = new URLSearchParams({ v: SHARE_VERSION });
+  for (const [prefix, f] of homes) for (const [k, v] of Object.entries(f)) sp.set(prefix + k, String(v));
+  return sp.toString();
+}
+
+// 링크 필드 → { d, areaIdx, e, ui }. 단지·면적을 못 찾으면 null
+function restoreHome(f) {
+  const d = COMPLEX_DATABASE.find((x) => x.id === f.i);
+  if (!d) return null;
+  const areaIdx = d.areas.findIndex((x) => x.areaM2 === Number(f.m));
+  if (areaIdx < 0) return null;
+  const persona = SHARE_PERSONAS[Number(f.s)] || "first";
+  const preset = PRESETS[f.pr] ? f.pr : null;
+  const e = buildEngineState(d, d.areas[areaIdx], { persona, preset: preset || undefined });
+  const p = shareNum(f.p);
+  if (p !== null) e.purchasePriceManwon = p;
+  if (f.l !== undefined) { e.hasLoan = true; e.loanAmountManwon = shareNum(f.l) ?? 0; }
+  if (f.rp !== undefined) {
+    SHARE_REPAIR_KEYS.forEach((k, n) => {
+      const it = e.repairItems[k];
+      if (!it) return;
+      it.enabled = !!hasBit(f.rp, n);
+      it.grade = hasBit(f.rg, n) ? "premium" : "standard";
+    });
+  }
+  const bc = shareNum(f.bc);
+  if (bc && e.repairItems.bathroom) e.repairItems.bathroom.count = bc;
+  if (f.q !== undefined) { e.repairOverrideEnabled = true; e.repairOverrideAmount = shareNum(f.q) ?? 0; }
+  if (f.t !== undefined) SHARE_TOGGLES.forEach((k, n) => { e[k] = !!hasBit(f.t, n); });
+  if (f.bf !== undefined) e.customBrokerFeeManwon = shareNum(f.bf);
+  if (f.rf !== undefined) e.customRegFeeManwon = shareNum(f.rf);
+  for (const [code, key] of Object.entries(SHARE_AMOUNTS)) { const v = shareNum(f[code]); if (v !== null) e[key] = v; }
+  const enabled = Object.values(e.repairItems).filter((it) => it.enabled);
+  const grade = enabled.length ? (enabled.some((it) => it.grade === "premium") ? "premium" : "standard") : (preset ? PRESETS[preset].grade : "standard");
+  return { d, areaIdx, e, ui: { persona, preset, grade } };
+}
+
+// URL 에서 한 집(prefix "") 또는 비교 두 집("A." / "B.") 필드 꺼내기
+function readShareHomes(sp) {
+  if (sp.get("v") !== SHARE_VERSION) return null;
+  const pick = (prefix) => {
+    const f = {};
+    for (const [k, v] of sp) {
+      if (!k.startsWith(prefix)) continue;
+      const key = k.slice(prefix.length);
+      if (key && !key.includes(".")) f[key] = v;
+    }
+    return f.i ? f : null;
+  };
+  if (sp.has("A.i") || sp.has("B.i")) {
+    const A = pick("A."), B = pick("B.");
+    return A && B ? { compare: true, homes: [A, B] } : null;
+  }
+  const one = pick("");
+  return one ? { compare: false, homes: [one] } : null;
+}
+
+// 시작할 때 공유 링크로 들어왔으면 그 계산을 엶. 못 찾으면 안내 후 홈
+async function openSharedLink() {
+  let sp;
+  try { sp = new URLSearchParams(location.search); } catch { return; }
+  const link = readShareHomes(sp);
+  if (!link) return;
+  try { history.replaceState(null, "", location.pathname + location.hash); } catch {} // 새로고침해도 다시 열리지 않게
+  if (CONFIG.DATA_BASE && !DATA_META.sample) {
+    await Promise.all([...new Set(link.homes.map((f) => f.r).filter(Boolean))].map((r) => loadRegion(r)));
+  }
+  const restored = link.homes.map(restoreHome);
+  if (restored.some((h) => !h)) {
+    S.screen = "home";
+    toast(DATA_META.error ? "실거래 데이터를 못 불러와 공유받은 계산을 열지 못했어요" : "이 단지 정보가 바뀌었어요");
+    return;
+  }
+  S.shared = true;
+  if (link.compare) {
+    const [A, B] = restored;
+    S.slots = { A: snapshotOf(A.d, A.e, A.ui), B: snapshotOf(B.d, B.e, B.ui) };
+    S.danjiId = null;
+    E = null;
+    S.screen = "compare";
+  } else {
+    const h = restored[0];
+    S.danjiId = h.d.id;
+    S.areaIdx = h.areaIdx;
+    S.persona = h.ui.persona;
+    S.preset = h.ui.preset;
+    S.grade = h.ui.grade;
+    E = h.e;
+    E.budgetManwon = budget;
+    S.screen = "result";
+  }
+}
+
+// 받침 있으면 "이", 없으면 "가" (단지명 끝의 괄호·공백은 건너뜀)
+function subjectParticle(name) {
+  const s = String(name).replace(/\([^)]*\)\s*$/, "").trim();
+  const ch = s[s.length - 1] || "";
+  const code = ch.charCodeAt(0) - 0xac00;
+  if (code >= 0 && code <= 11171) return code % 28 ? "이" : "가";
+  if (/[0136-8]/.test(ch)) return "이"; // 영·일·삼·육·칠·팔
+  return "가";
+}
+
+function resultShareText(d, c) {
+  return `[${d.name} ${c.areaM2}㎡] 매매가 ${won(c.price)}, 입주까지 총 ${won(c.grandTotal)} (추가 ${won(c.extraCostTotal)}) — ${SHARE_TAIL}`;
+}
+function compareShareText(A, B) {
+  const td = Math.round(B.calc.grandTotal - A.calc.grandTotal);
+  if (td === 0) return `${A.name} vs ${B.name}: 입주까지 드는 돈이 같아요 — ${SHARE_TAIL}`;
+  const win = td < 0 ? B : A;
+  return `${A.name} vs ${B.name}: 입주까지는 ${win.name}${subjectParticle(win.name)} ${won(Math.abs(td))} 싸요 — ${SHARE_TAIL}`;
+}
+
+// 토스 앱 공유 (@apps-in-toss/web-framework 3.x Share). SDK 를 붙인 빌드에서 window.__AIT_SHARE__ = Share 로 넣어 줌
+const tossShare = () => (window.__AIT_SHARE__ && CONFIG.APP_NAME ? window.__AIT_SHARE__ : null);
+const webShareUrl = (query) => `${location.origin}${location.pathname}?${query}`;
+
+async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true; } catch {}
+  try {
+    const ta = document.createElement("textarea");
+    ta.value = text;
+    ta.setAttribute("readonly", "");
+    ta.style.cssText = "position:fixed;top:-1000px;opacity:0";
+    document.body.appendChild(ta);
+    ta.select();
+    const ok = document.execCommand("copy");
+    ta.remove();
+    return ok;
+  } catch { return false; }
+}
+
+async function sendShare(text, query) {
+  try {
+    const toss = tossShare();
+    if (toss) {
+      const link = await toss.createLink({ path: `intoss://${CONFIG.APP_NAME}?${query}`, ...(CONFIG.SHARE_OG_IMAGE ? { ogImageUrl: CONFIG.SHARE_OG_IMAGE } : {}) });
+      await toss.sendMessage({ message: `${text}\n${link}` });
+      return;
+    }
+    const url = webShareUrl(query);
+    if (navigator.share) {
+      try { await navigator.share({ text, url }); return; }
+      catch (e) { if (e?.name === "AbortError") return; } // 사용자가 닫음
+    }
+    if (await copyText(`${text}\n${url}`)) toast("링크를 복사했어요. 보낼 곳에 붙여 넣으세요");
+    else window.prompt("아래 링크를 복사해서 보내세요", `${text}\n${url}`);
+  } catch {
+    toast("보내기를 못 했어요. 잠시 후 다시 해 주세요");
+  }
+}
+
+function shareResult() {
+  const d = danji();
+  sendShare(resultShareText(d, calculateAllCosts(E)), shareQuery([["", shareFields(d, E, S)]]));
+}
+function shareCompare() {
+  const { A, B } = S.slots;
+  if (!A || !B) return;
+  sendShare(compareShareText(A, B), shareQuery([["A.", A.share], ["B.", B.share]]));
+}
+
+const SHARE_ICON = `<svg class="ico" viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 3v12M7 8l5-5 5 5M5 13v6a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+
 document.getElementById("app").innerHTML = `<div class="empty" style="padding-top:200px">불러오는 중…</div>`;
-loadData().then(render);
+loadData().then(openSharedLink).then(render);
 </script>
 </body>
 </html>

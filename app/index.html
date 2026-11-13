@@ -68,6 +68,8 @@
   .tile.on .e{filter:none;opacity:1}
   .tile.on .n{color:var(--text)}
   .tile.on .a{color:var(--blue);font-weight:700}
+  .morebtn{display:block;width:100%;margin-top:8px;padding:11px 12px;border-radius:12px;background:var(--bg);font-size:13px;font-weight:700;color:var(--sub);text-align:center;line-height:1.5}
+  .morebtn b{color:var(--blue)}
   .switchrow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0}
   .sw{width:46px;height:28px;border-radius:999px;background:#D1D6DB;position:relative;flex-shrink:0;transition:.2s}
   .sw::after{content:"";position:absolute;width:22px;height:22px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
@@ -262,6 +264,51 @@ const jsArg = (v) => esc(JSON.stringify(v)); // onclick="f(${jsArg(id)})"
           grades: {
             standard: { label: "현관·욕실 기본", range: "50~80만", defaultManwon: 65 },
             premium: { label: "욕실2+베란다 탄성", range: "90~140만", defaultManwon: 110 }
+          }
+        },
+        sash: {
+          name: "샷시",
+          scaleByArea: true,
+          grades: {
+            standard: { label: "일반 PVC 샷시", range: "1,000~1,500만", defaultManwon: 1200 },
+            premium: { label: "고단열 브랜드 샷시", range: "1,500~2,200만", defaultManwon: 1800 }
+          }
+        },
+        door: {
+          name: "문·문틀",
+          scaleByArea: false,
+          grades: {
+            standard: { label: "필름 시공", range: "150~250만", defaultManwon: 200 },
+            premium: { label: "문·문틀 교체", range: "300~500만", defaultManwon: 400 }
+          }
+        },
+        middleDoor: {
+          name: "중문",
+          scaleByArea: false,
+          grades: {
+            standard: { label: "3연동 중문", range: "120~200만", defaultManwon: 150 }
+          }
+        },
+        boiler: {
+          name: "보일러",
+          scaleByArea: false,
+          grades: {
+            standard: { label: "콘덴싱 보일러 교체", range: "90~140만", defaultManwon: 110 }
+          }
+        },
+        entrance: {
+          name: "현관",
+          scaleByArea: false,
+          grades: {
+            standard: { label: "바닥 타일·신발장", range: "80~160만", defaultManwon: 120 }
+          }
+        },
+        systemAc: {
+          name: "시스템에어컨",
+          scaleByArea: false,
+          grades: {
+            standard: { label: "3대", range: "350~450만", defaultManwon: 400 },
+            premium: { label: "5대", range: "550~700만", defaultManwon: 600 }
           }
         }
       }
@@ -857,11 +904,16 @@ const PERSONA = {
   one:     { ic: "🔄", t: "갈아타기예요", d: "지금 집을 팔고 이사 (일시적 2주택)", own: "one", ft: false },
   multi:   { ic: "🏘️", t: "집이 2채 이상이에요", d: "취득세는 위택스에서 따로 확인해야 해요", own: "multi", ft: false }
 };
-const REPAIR_ICON = { wallpaper: "🧱", flooring: "🪵", sink: "🚰", bathroom: "🚿", lighting: "💡", closet: "🚪", grout: "✨" };
+const REPAIR_ICON = {
+  wallpaper: "🧱", flooring: "🪵", sink: "🚰", bathroom: "🚿", lighting: "💡", closet: "🗄️", grout: "✨",
+  sash: "🪟", door: "🚪", middleDoor: "🪞", boiler: "🔥", entrance: "👟", systemAc: "❄️"
+};
+// 수리 화면에 먼저 보이는 항목 (나머지는 "더 보기")
+const REPAIR_PRIMARY = ["wallpaper", "flooring", "sink", "bathroom", "sash", "door", "lighting", "grout"];
 const PRESETS = {
   new:  { t: "신축급", on: ["grout"], grade: "standard" },
   basic:{ t: "기본 손질", on: ["wallpaper", "lighting", "grout"], grade: "standard" },
-  full: { t: "올수리", on: ["wallpaper", "flooring", "sink", "bathroom", "lighting", "closet", "grout"], grade: "premium" }
+  full: { t: "올수리", on: ["wallpaper", "flooring", "sink", "bathroom", "lighting", "closet", "grout", "sash", "door", "entrance", "boiler"], grade: "premium" }
 };
 const GROUP_COLORS = { g1: "#3182F6", g2: "#8B5CF6", g3: "#03B26C", g4: "#F59E0B" };
 
@@ -1096,6 +1148,14 @@ const SCREENS = {
   repair() {
     const c = calculateAllCosts(E);
     const bath = E.repairItems.bathroom;
+    const primary = c.repairBreakdown.filter((r) => REPAIR_PRIMARY.includes(r.key));
+    const more = c.repairBreakdown.filter((r) => !REPAIR_PRIMARY.includes(r.key));
+    const moreOn = more.filter((r) => r.enabled).length;
+    const tile = (r) => `
+            <button class="tile ${r.enabled ? "on" : ""}" onclick="toggleRepair('${r.key}')">
+              <div class="e">${REPAIR_ICON[r.key]}</div><div class="n">${r.name.replace("·탄성코트", "")}</div>
+              <div class="a">${r.enabled ? man(r.amountManwon) : "안 함"}</div>
+            </button>`;
     return `
       <h1>어디를 고칠까요?</h1>
       <p class="lead">${danji().builtYear}년 준공 단지에 맞춰 골라뒀어요</p>
@@ -1105,13 +1165,11 @@ const SCREENS = {
       ${E.repairOverrideEnabled ? `
         <div class="sec info">받은 견적 <b>${won(E.repairOverrideAmount)}</b>으로 계산해요.</div>
       ` : `
-        <div class="sec tiles">
-          ${c.repairBreakdown.map((r) => `
-            <button class="tile ${r.enabled ? "on" : ""}" onclick="toggleRepair('${r.key}')">
-              <div class="e">${REPAIR_ICON[r.key]}</div><div class="n">${r.name.replace("·탄성코트", "")}</div>
-              <div class="a">${r.enabled ? man(r.amountManwon) : "안 함"}</div>
-            </button>`).join("")}
-        </div>
+        <div class="sec tiles">${primary.map(tile).join("")}</div>
+        ${S.open.moreRepair ? `<div class="tiles" style="margin-top:8px">${more.map(tile).join("")}</div>` : ""}
+        <button class="morebtn" onclick="S.open.moreRepair=!S.open.moreRepair;render()">
+          ${S.open.moreRepair ? "접기 ▲" : `더 보기 · ${more.map((r) => r.name).join("·")}${moreOn ? ` <b>${moreOn}개 선택됨</b>` : ""} ▼`}
+        </button>
         <div class="sec">
           <div class="sec-t">자재</div>
           <div class="seg">

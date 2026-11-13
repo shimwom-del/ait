@@ -1,22 +1,12 @@
 {
- "updatedAt": "2026-11-13T02:14:41.675Z",
- "source": "국토교통부 아파트 매매 실거래가 상세 자료 (공공데이터포털), 좌표: V-World 지오코더",
+ "lawdCd": "41310",
+ "label": "구리",
+ "updatedAt": "2026-11-13T05:00:00.000Z",
  "period": {
   "months": 12,
   "from": "202512",
   "to": "202611"
  },
- "regions": [
-  {
-   "lawdCd": "41310",
-   "label": "구리"
-  },
-  {
-   "lawdCd": "41360",
-   "label": "남양주"
-  }
- ],
- "pendingRegions": [],
  "complexes": [
   {
    "id": "41310-1",

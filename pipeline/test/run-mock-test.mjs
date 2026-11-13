@@ -7,6 +7,9 @@
 //   C  11/14  다음 날          → 최근 3개월만 다시 받음
 //   D  12/01  1일              → 12개월 전체 다시 받음 + 범위 밖(2025-12) 캐시 삭제
 //   E  12/02  API 한도 초과(22) → 멈추고 캐시로 결과를 만듦
+//   F  12/03  인증키 오류       → 재시도 없이 실패, 캐시 유지
+//   G  12/04  시군구 목록 변경   → 빠진 시군구 결과 파일 삭제
+// 결과: data/index.json + data/complexes/{LAWD_CD}.json, 좌표는 pipeline/apt-points.json (가짜)
 import http from "node:http";
 import { spawn } from "node:child_process";
 import { readFile, writeFile, mkdtemp, cp, mkdir, readdir } from "node:fs/promises";
@@ -47,12 +50,7 @@ const server = http.createServer((req, res) => {
     if (ymd === ym && lawd === "41360") { total = 1; items = { item: NAMYANGJU }; } // 단일 객체 응답
     return res.end(JSON.stringify({ response: { header: { resultCode: "000", resultMsg: "OK" }, body: { items, totalCount: total, pageNo: page } } }));
   }
-  if (u.pathname === "/vworld") {
-    const addr = u.searchParams.get("address");
-    if (addr.includes("갈매동 665")) return res.end(JSON.stringify({ response: { status: "OK", result: { point: { x: "127.1235", y: "37.6385" } } } }));
-    return res.end(JSON.stringify({ response: { status: "NOT_FOUND" } }));
-  }
-  res.statusCode = 404; res.end("{}");
+  res.statusCode = 404; res.end("{}"); // V-World 등 다른 곳은 부르면 안 됨
 });
 await new Promise((r) => server.listen(0, r));
 const port = server.address().port;
@@ -60,9 +58,9 @@ const port = server.address().port;
 // 임시 폴더에 스크립트만 복사해서 실행 (원본 data/·cache 를 건드리지 않음)
 const work = await mkdtemp(join(tmpdir(), "hc-"));
 await mkdir(join(work, "pipeline"), { recursive: true });
-await cp(join(ROOT, "pipeline", "build-data.mjs"), join(work, "pipeline", "build-data.mjs"));
-await cp(join(ROOT, "pipeline", "config.json"), join(work, "pipeline", "config.json"));
-await writeFile(join(work, "pipeline", "geo-cache.json"), "{}");
+for (const f of ["build-data.mjs", "points.mjs", "config.json"]) await cp(join(ROOT, "pipeline", f), join(work, "pipeline", f));
+// 단지 좌표 (3단계 build-points.mjs 결과 형식). 남양주 '좌표없는단지'(41360-9)는 일부러 없음
+await writeFile(join(work, "pipeline", "apt-points.json"), JSON.stringify({ source: "테스트 좌표", points: { "41310-1": [37.6385, 127.1235] } }));
 const regionsPath = join(work, "regions.json");
 await writeFile(regionsPath, JSON.stringify({ regions: [
   { lawdCd: "41310", sido: "경기도", sigungu: "구리시", label: "구리" },
@@ -74,7 +72,7 @@ async function run(name, now, args = [], expectCode = 0) {
   const before = requests.length;
   const code = await new Promise((r) => {
     const p = spawn(process.execPath, [join(work, "pipeline", "build-data.mjs"), ...args], {
-      env: { ...process.env, DATA_GO_KR_KEY: "test+key/=", VWORLD_KEY: "vk", RTMS_URL: `http://127.0.0.1:${port}/rtms`, VWORLD_URL: `http://127.0.0.1:${port}/vworld`,
+      env: { ...process.env, DATA_GO_KR_KEY: "test+key/=", VWORLD_KEY: "", RTMS_URL: `http://127.0.0.1:${port}/rtms`,
         REGIONS_PATH: regionsPath, NOW: now, CONCURRENCY: "1", REQUEST_GAP_MS: "0" },
       stdio: ["ignore", "pipe", "inherit"]
     });
@@ -85,9 +83,17 @@ async function run(name, now, args = [], expectCode = 0) {
   if (expectCode !== 0) return { reqs: requests.slice(before) };
   const logLines = (await readFile(join(cacheDir, "runs.jsonl"), "utf8")).trim().split("\n");
   const summary = JSON.parse(logLines.at(-1));
-  const out = JSON.parse(await readFile(join(work, "data", "complexes.json"), "utf8"));
+  const index = JSON.parse(await readFile(join(work, "data", "index.json"), "utf8"));
+  const regionFile = async (lawd) => { try { return JSON.parse(await readFile(join(work, "data", "complexes", `${lawd}.json`), "utf8")); } catch { return null; } };
+  const guri = await regionFile("41310"), nyj = await regionFile("41360");
+  const out = {
+    index, guri, nyj, period: index.period,
+    complexes: [...(guri?.complexes || []), ...(nyj?.complexes || [])],
+    pendingRegions: index.regions.filter((x) => x.status === "pending").map((x) => x.label)
+  };
   return { summary, out, reqs: requests.slice(before) };
 }
+const regionOf = (out, lawd) => out.index.regions.find((x) => x.lawdCd === lawd);
 const cacheFiles = async (lawd) => (await readdir(join(cacheDir, lawd))).filter((f) => /^\d{6}\.json$/.test(f)).sort();
 
 // A: 백필 도중 멈춤
@@ -101,6 +107,9 @@ assert.equal((await cacheFiles("41310")).length + (await cacheFiles("41360")).le
 assert.equal(r.summary.backfillRemaining, 15, "A: 남은 백필 15개월");
 assert.equal(r.out.complexes.length, 0, "A: 12개월이 덜 모이면 결과에 안 넣음");
 assert.deepEqual(r.out.pendingRegions, ["구리", "남양주"]);
+assert.equal(r.out.guri, null, "A: pending 시군구는 파일 없음");
+assert.deepEqual(regionOf(r.out, "41310"), { lawdCd: "41310", sido: "경기도", sigungu: "구리시", label: "구리", center: null, bbox: null, complexes: 0, mapped: 0, trades: 0, updatedAt: null, status: "pending" });
+assert.ok(!existsSync(join(work, "data", "complexes.json")), "예전 단일 파일 없음");
 
 // B: 같은 날 이어 받기
 r = await run("B 이어 받기 (같은 날)", DAY.B);
@@ -122,9 +131,21 @@ assert.equal(a.avgPriceManwon, Math.round((79250 + 81000) / 2));
 assert.equal(a.lastTxPriceManwon, 81000, "가장 최근 거래");
 assert.equal(a.floorRange, "3층 ~ 15층");
 assert.equal(a.lowTxRecords.length, 2, "3건 미만이면 개별 거래");
-const cache = JSON.parse(await readFile(join(work, "pipeline", "geo-cache.json"), "utf8"));
-assert.ok(cache["41360-9"].failedAt, "좌표 실패도 캐시에 기록");
-const sampleOut = r.out;
+// 시군구 파일·index
+assert.equal(r.out.guri.lawdCd, "41310");
+assert.equal(r.out.guri.label, "구리");
+assert.equal(r.out.guri.period.months, 12);
+assert.equal(r.out.guri.updatedAt, "2026-11-13T05:00:00.000Z", "시군구 갱신일 = 가장 최근에 받은 캐시");
+assert.deepEqual(r.out.nyj.complexes, [], "좌표 없는 단지는 파일에 안 넣음");
+const g = regionOf(r.out, "41310"), n = regionOf(r.out, "41360");
+assert.deepEqual([g.status, g.complexes, g.mapped, g.trades], ["ok", 1, 1, 2]);
+assert.deepEqual(g.center, [37.6385, 127.1235], "중심 = 단지 좌표 평균");
+assert.deepEqual(g.bbox, [37.6385, 127.1235, 37.6385, 127.1235]);
+assert.deepEqual([n.status, n.complexes, n.mapped, n.center, n.bbox], ["ok", 1, 0, null, null], "좌표 없는 시군구는 중심 없음");
+assert.equal(r.summary.unmatched, 1, "매칭 실패 1곳 기록");
+assert.equal(r.out.index.source, "국토교통부 아파트 매매 실거래가 상세 자료 (공공데이터포털) · 좌표: 테스트 좌표");
+assert.ok(!existsSync(join(work, "pipeline", "geo-cache.json")), "geo-cache.json 안 만듦");
+const sampleOut = r.out.guri;
 
 // C: 다음 날 — 최근 3개월만
 r = await run("C 다음 날 (최근 3개월)", DAY.C);
@@ -157,6 +178,14 @@ const before = (await cacheFiles("41310")).length;
 r = await run("F 인증키 오류", "2026-12-03T03:00:00Z", [], 1);
 assert.equal(r.reqs.length, 1, "F: 재시도 없이 바로 멈춤");
 assert.equal((await cacheFiles("41310")).length, before, "F: 캐시 유지");
+
+// G: 목록에서 빠진 시군구는 결과 파일도 지움
+badKey = false; quotaExceeded = true;
+await writeFile(regionsPath, JSON.stringify({ regions: [{ lawdCd: "41310", sido: "경기도", sigungu: "구리시", label: "구리" }] }));
+r = await run("G 시군구 목록 변경", "2026-12-04T03:00:00Z");
+assert.equal(r.out.index.regions.length, 1);
+assert.equal(r.out.nyj, null, "G: 빠진 시군구 파일 삭제");
+assert.equal(r.out.guri.complexes.length, 1);
 
 server.close();
 console.log("\n✅ 모든 검사 통과");

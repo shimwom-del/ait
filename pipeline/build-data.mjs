@@ -8,13 +8,13 @@
 //   2) 해제 거래(cdealType = 'O') 제외
 //   3) 단지(aptSeq) → 전용면적 타입(소수점 버림)별로 평균·건수·마지막 거래·층 범위 계산
 //      12개월이 다 모인 시군구만 결과에 넣음 (일부 달만으로 평균을 내지 않음)
-//   4) 단지 좌표를 V-World 지오코더로 찾고 캐시에 저장  ※ 3단계에서 저장 가능한 좌표 출처로 바꿀 예정
-//   5) data/complexes.json 으로 저장
+//   4) 단지 좌표는 pipeline/apt-points.json (points.mjs) 에서 붙임. 좌표 없는 단지는 지도에서 뺌
+//   5) data/index.json (시군구 목록·중심·범위·단지 수) + data/complexes/{LAWD_CD}.json (시군구별 단지)
 //
 // 실행: node pipeline/build-data.mjs [--max-calls N] [--full]
 //   --max-calls N : 이번 실행의 HTTP 호출 상한 (하루 상한 DAILY_CALL_LIMIT 과 별개로 더 작게 제한)
 //   --full        : 오늘이 1일이 아니어도 12개월 전체를 다시 받음
-//   인증키는 저장소 루트의 .env (DATA_GO_KR_KEY=..., VWORLD_KEY=...) 에서 읽음.
+//   인증키는 저장소 루트의 .env (DATA_GO_KR_KEY=...) 에서 읽음.
 //   이미 설정된 환경변수(GitHub Actions Secrets 등)가 있으면 그쪽이 우선.
 // 필요: Node 18 이상 (fetch 내장)
 
@@ -22,6 +22,7 @@ import { readFile, writeFile, mkdir, rename, readdir, rm, appendFile, open } fro
 import { readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadPoints } from "./points.mjs";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -47,19 +48,19 @@ const REGIONS_PATH = process.env.REGIONS_PATH || join(ROOT, "pipeline", "regions
 const CACHE_DIR = process.env.CACHE_DIR || join(ROOT, "pipeline", "cache");
 const USAGE_PATH = join(CACHE_DIR, "usage.json");      // 날짜(한국 시간)별 누적 호출 수
 const RUNLOG_PATH = join(CACHE_DIR, "runs.jsonl");     // 실행마다 한 줄 요약
-const GEO_CACHE_PATH = join(ROOT, "pipeline", "geo-cache.json");
-const OUT_PATH = join(ROOT, "data", "complexes.json");
+const POINTS_PATH = process.env.POINTS_PATH || join(ROOT, "pipeline", "apt-points.json");
+const DATA_DIR = process.env.DATA_DIR || join(ROOT, "data");
+const INDEX_PATH = join(DATA_DIR, "index.json");
+const REGION_DIR = join(DATA_DIR, "complexes");
 
 const RTMS_URL = process.env.RTMS_URL ||
   "https://apis.data.go.kr/1613000/RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev";
-const VWORLD_URL = process.env.VWORLD_URL || "https://api.vworld.kr/req/address";
 const DATA_GO_KR_KEY = process.env.DATA_GO_KR_KEY; // 공공데이터포털 '일반 인증키(Decoding)'
-const VWORLD_KEY = process.env.VWORLD_KEY;         // V-World 인증키
 const PAGE_SIZE = 1000;
 const DAILY_CALL_LIMIT = Number(process.env.DAILY_CALL_LIMIT) || 9000; // 개발계정 10,000 중 1,000은 여유
 const CONCURRENCY = Math.max(1, Number(process.env.CONCURRENCY) || 4);
 const REQUEST_GAP_MS = Number(process.env.REQUEST_GAP_MS ?? 150);
-const GEO_RETRY_DAYS = 30;                          // 좌표를 못 찾은 단지는 30일 뒤 다시 시도
+const SOURCE_TEXT = "국토교통부 아파트 매매 실거래가 상세 자료 (공공데이터포털)";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const log = (...a) => console.log(...a);
@@ -293,14 +294,12 @@ export function aggregate(trades, region, period) {
           : []
       };
     });
-    const addr = [region.sido, region.sigungu, latest.umdNm, latest.jibun].filter(Boolean).join(" ");
     complexes.push({
       id: key,
       name: latest.aptNm,
       region: region.label,
       lawdCd: region.lawdCd,
-      address: addr,
-      geoQuery: addr,
+      address: [region.sido, region.sigungu, latest.umdNm, latest.jibun].filter(Boolean).join(" "),
       builtYear: latest.buildYear,
       areas
     });
@@ -308,24 +307,16 @@ export function aggregate(trades, region, period) {
   return complexes;
 }
 
-// ---------- 좌표 (V-World 지오코더) ※ 3단계에서 교체 ----------
-async function geocode(address) {
-  for (const type of ["parcel", "road"]) {
-    const url = `${VWORLD_URL}?service=address&request=getcoord&version=2.0&crs=epsg:4326&refine=true&simple=false&format=json&type=${type}&address=${encodeURIComponent(address)}&key=${encodeURIComponent(VWORLD_KEY)}`;
-    try {
-      const res = await fetch(url);
-      const json = await res.json();
-      const r = json?.response;
-      if (r?.status === "OK" && r.result?.point) {
-        const lng = parseFloat(r.result.point.x), lat = parseFloat(r.result.point.y);
-        if (Number.isFinite(lat) && Number.isFinite(lng)) return { lat, lng };
-      }
-      if (r?.status === "ERROR") throw new Error(`V-World 오류: ${r.error?.text || JSON.stringify(r.error)}`);
-    } catch (e) {
-      if (String(e.message).includes("V-World 오류")) throw e;
-    }
+// ---------- 시군구 중심·범위 ----------
+const round = (v, d = 5) => Math.round(v * 10 ** d) / 10 ** d;
+export function centerAndBbox(points) {
+  if (!points.length) return { center: null, bbox: null };
+  let lat = 0, lng = 0, s = 90, w = 180, n = -90, e = -180;
+  for (const p of points) {
+    lat += p.lat; lng += p.lng;
+    s = Math.min(s, p.lat); n = Math.max(n, p.lat); w = Math.min(w, p.lng); e = Math.max(e, p.lng);
   }
-  return null;
+  return { center: [round(lat / points.length), round(lng / points.length)], bbox: [round(s), round(w), round(n), round(e)] };
 }
 
 // ---------- 실행 ----------
@@ -336,7 +327,6 @@ function argValue(name) {
 
 async function main() {
   if (!DATA_GO_KR_KEY) throw new Error("DATA_GO_KR_KEY 환경변수가 없어요 (공공데이터포털 일반 인증키, Decoding)");
-  if (!VWORLD_KEY) throw new Error("VWORLD_KEY 환경변수가 없어요 (V-World 인증키)");
 
   const startedAt = nowDate();
   const today = kstDay(startedAt);
@@ -353,7 +343,7 @@ async function main() {
   const usedBefore = usage[today] || 0;
   const maxCalls = Number(argValue("--max-calls")) || Infinity;
   const budget = new CallBudget(Math.max(0, Math.min(maxCalls, DAILY_CALL_LIMIT - usedBefore)));
-  const stats = { calls: 0, retries: 0, monthsFetched: 0, byReason: {}, failed: [], trades: 0, canceled: 0, complexes: 0, geocoded: 0, unmatched: [] };
+  const stats = { calls: 0, retries: 0, monthsFetched: 0, byReason: {}, failed: [], trades: 0, canceled: 0, complexes: 0, unmatched: [] };
 
   await mkdir(CACHE_DIR, { recursive: true });
   const pruned = await pruneCache(regions, months);
@@ -371,19 +361,29 @@ async function main() {
   }
   if (fatal) throw fatal;
 
-  // 집계: 12개월이 다 모인 시군구만
-  const geoCache = await readJson(GEO_CACHE_PATH, {});
-  const out = [];
+  // 집계: 12개월이 다 모인 시군구만 → 시군구별 파일 + index
+  const points = await loadPoints(POINTS_PATH);
+  const updatedAt = new Date().toISOString();
+  const index = [];
+  const written = new Set();
   const pending = [];
+  let mapped = 0;
+  await mkdir(REGION_DIR, { recursive: true });
   for (const region of regions) {
     const raws = [];
-    let complete = true;
+    let complete = true, lastFetched = null;
     for (const ym of months) {
       const c = await readJson(cachePath(region.lawdCd, ym), null);
       if (!c) { complete = false; break; }
       raws.push(c.items);
+      if (!lastFetched || c.fetchedAt > lastFetched) lastFetched = c.fetchedAt;
     }
-    if (!complete) { pending.push(region.label); continue; }
+    const base = { lawdCd: region.lawdCd, sido: region.sido, sigungu: region.sigungu, label: region.label };
+    if (!complete) {
+      pending.push(region.label);
+      index.push({ ...base, center: null, bbox: null, complexes: 0, mapped: 0, trades: 0, updatedAt: null, status: "pending" });
+      continue;
+    }
     const trades = [];
     for (const items of raws) for (const r of items) {
       const t = normalize(r, region);
@@ -393,34 +393,33 @@ async function main() {
     }
     stats.trades += trades.length;
     const complexes = aggregate(trades, region, period);
+    const withCoords = [];
     for (const c of complexes) {
-      let geo = geoCache[c.id];
-      const stale = geo?.failedAt && (Date.now() - Date.parse(geo.failedAt)) / 864e5 > GEO_RETRY_DAYS;
-      if (!geo || stale) {
-        const point = await geocode(c.geoQuery);
-        geo = point ? { ...point, query: c.geoQuery } : { failedAt: new Date().toISOString(), query: c.geoQuery };
-        geoCache[c.id] = geo;
-        if (point) stats.geocoded++;
-        await sleep(100);
-      }
-      if (geo.lat === undefined) { stats.unmatched.push(`${c.name} (${c.geoQuery})`); continue; }
-      const { geoQuery, ...rest } = c;
-      out.push({ ...rest, lat: geo.lat, lng: geo.lng });
+      const p = points.get(c.id);
+      if (!p) { stats.unmatched.push(`${region.label} ${c.name} (${c.address})`); continue; }
+      withCoords.push({ ...c, lat: p.lat, lng: p.lng });
     }
     stats.complexes += complexes.length;
+    mapped += withCoords.length;
+    const file = `${region.lawdCd}.json`;
+    await writeJsonAtomic(join(REGION_DIR, file), { lawdCd: region.lawdCd, label: region.label, updatedAt: lastFetched, period, complexes: withCoords });
+    written.add(file);
+    index.push({
+      ...base, ...centerAndBbox(withCoords),
+      complexes: complexes.length, mapped: withCoords.length, trades: trades.length,
+      updatedAt: lastFetched, status: "ok"
+    });
   }
-
-  const result = {
-    updatedAt: new Date().toISOString(),
-    source: "국토교통부 아파트 매매 실거래가 상세 자료 (공공데이터포털), 좌표: V-World 지오코더",
+  // 이번에 만들지 않은 시군구 파일(목록에서 빠졌거나 pending 으로 돌아간 곳)과 예전 단일 파일 지우기
+  for (const f of await readdir(REGION_DIR)) if (!written.has(f)) await rm(join(REGION_DIR, f), { force: true });
+  await rm(join(DATA_DIR, "complexes.json"), { force: true });
+  await writeJsonAtomic(INDEX_PATH, {
+    updatedAt,
     period,
-    regions: regions.filter((r) => !pending.includes(r.label)).map(({ lawdCd, label }) => ({ lawdCd, label })),
-    pendingRegions: pending,
-    complexes: out
-  };
-  await mkdir(dirname(OUT_PATH), { recursive: true });
-  await writeFile(OUT_PATH, JSON.stringify(result));
-  await writeFile(GEO_CACHE_PATH, JSON.stringify(geoCache, null, 1));
+    source: points.source ? `${SOURCE_TEXT} · 좌표: ${points.source}` : SOURCE_TEXT,
+    regions: index
+  });
+  const out = { length: mapped };
 
   // 백필이 얼마나 남았는지 (다음 실행에서 받을 빠진 달)
   const missingAfter = jobs.filter((j) => j.reason === "missing").length - (stats.byReason.missing || 0);
@@ -433,7 +432,7 @@ async function main() {
     stoppedEarly: stop ? stop.message : null, jobsSkipped: skipped, failedMonths: stats.failed.length,
     backfillRemaining: missingAfter,
     regionsComplete: regions.length - pending.length, regionsPending: pending.length,
-    trades: stats.trades, canceled: stats.canceled, complexes: stats.complexes, mapped: out.length
+    trades: stats.trades, canceled: stats.canceled, complexes: stats.complexes, mapped: out.length, unmatched: stats.unmatched.length
   };
   await appendFile(RUNLOG_PATH, JSON.stringify(summary) + "\n");
 
@@ -442,8 +441,13 @@ async function main() {
   if (stop) log(`멈춤: ${stop.message} → 못 받은 달 ${skipped}개는 다음 실행에서 이어 받아요`);
   if (stats.failed.length) log(`실패한 달 ${stats.failed.length}개 (다음 실행에서 다시 시도):\n - ${stats.failed.slice(0, 20).join("\n - ")}`);
   log(`백필 남은 달: ${missingAfter}개 · 결과에 넣은 시군구 ${regions.length - pending.length}곳 / 12개월이 덜 모인 시군구 ${pending.length}곳`);
-  log(`완료: 유효 거래 ${stats.trades}건 (해제 ${stats.canceled}건 제외), 단지 ${stats.complexes}곳 중 지도 표시 ${out.length}곳`);
-  if (stats.unmatched.length) log(`좌표 못 찾음 ${stats.unmatched.length}곳:\n - ${stats.unmatched.slice(0, 20).join("\n - ")}`);
+  log(`완료: 유효 거래 ${stats.trades}건 (해제 ${stats.canceled}건 제외), 단지 ${stats.complexes}곳`);
+  const pct = (a, b) => (b ? ((a / b) * 100).toFixed(1) : "0.0");
+  log(`좌표 매칭: ${out.length} / ${stats.complexes}곳 (${pct(out.length, stats.complexes)}%) · 실패 ${stats.unmatched.length}곳 (${pct(stats.unmatched.length, stats.complexes)}%)${points.size ? "" : " — apt-points.json 이 없어요"}`);
+  const worst = index.filter((r) => r.status === "ok" && r.complexes > 0 && r.mapped < r.complexes)
+    .sort((a, b) => a.mapped / a.complexes - b.mapped / b.complexes).slice(0, 10);
+  if (worst.length) log(`매칭률 낮은 시군구: ${worst.map((r) => `${r.label} ${pct(r.mapped, r.complexes)}% (${r.complexes - r.mapped}곳 실패)`).join(" · ")}`);
+  if (stats.unmatched.length && process.env.VERBOSE) log(` - ${stats.unmatched.slice(0, 50).join("\n - ")}`);
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === resolve(process.argv[1])) {

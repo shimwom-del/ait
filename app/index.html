@@ -151,7 +151,8 @@
   .budget{margin-top:16px}
   .budget .field{margin-top:0}
   .budget .field>span:first-child{margin-right:10px;white-space:nowrap}
-  .budget .assume{font-size:12px;color:var(--muted);margin-top:6px;padding:0 4px}
+  .budget .assume{font-size:12px;color:var(--muted);margin-top:6px;padding:0 4px;display:flex;flex-wrap:wrap;gap:2px 8px}
+  .budget .echo{color:var(--text);font-weight:700}
   .mapbox .bcount{position:absolute;right:12px;top:12px;z-index:500;background:var(--blue);color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;box-shadow:0 1px 4px rgba(0,0,0,.12);pointer-events:none}
   .mapbox .bcount.zero{background:var(--sub)}
   .pin.out b{background:#B0B8C1;font-size:0;padding:0;width:9px;height:9px;border-radius:50%;border:1.5px solid #fff;box-shadow:none}
@@ -1006,19 +1007,30 @@ function budgetMatch(d) {
   return { d, areaIdx: best.areaIdx, areaM2: best.areaM2, total: best.total, left: budget - best.total, ok: best.total <= budget };
 }
 
+// 홈 화면 예산은 천만 원 단위로 입력 (95 → 9억 5,000만 원). budget 변수와 계산은 지금처럼 만 원 단위
+const BUDGET_INPUT_UNIT = 1000;                         // 천만 원 = 1,000만 원
+const toBudgetManwon = (v) => Math.max(0, Math.round((parseFloat(v) || 0) * BUDGET_INPUT_UNIT));
+const budgetInputValue = () => (budget > 0 ? String(+(budget / BUDGET_INPUT_UNIT).toFixed(3)) : "");
+const budgetEchoText = (manwon) => (manwon > 0 ? `= ${won(manwon)}` : "");
+
 let budgetTimer;
 function onBudgetInput(v) {
+  // 입력하는 동안 만 원 환산은 바로 보여주고, 계산은 멈춘 뒤 한 번만
+  const echo = document.getElementById("budgetEcho");
+  if (echo) echo.textContent = budgetEchoText(toBudgetManwon(v));
   clearTimeout(budgetTimer);
-  budgetTimer = setTimeout(() => applyBudget(v), 400); // 입력 중에는 멈춘 뒤 한 번만
+  budgetTimer = setTimeout(() => applyBudget(v), 400);
 }
 function applyBudget(v) {
   clearTimeout(budgetTimer);
-  const next = Math.max(0, Math.round(+v || 0));
+  const next = toBudgetManwon(v);
   if (next === budget) return;
   budget = next;
   // 홈 화면을 다시 그리지 않고 필요한 곳만 바꿈 (입력 포커스·지도 위치 유지)
   const as = document.getElementById("budgetAssume");
   if (as) as.textContent = budget > 0 ? BUDGET_ASSUMPTION : "";
+  const echo = document.getElementById("budgetEcho");
+  if (echo) echo.textContent = budgetEchoText(budget);
   renderHomeList();
   refreshMap();
 }
@@ -1078,8 +1090,8 @@ const SCREENS = {
     return `
       <h1>아파트를 찍어보세요.<br><em>입주까지 드는 돈</em>을 계산해드려요.</h1>
       <div class="budget">
-        <div class="field"><span>내 예산</span><input id="homeBudget" type="number" inputmode="numeric" placeholder="예산 안에 드는 곳만 보여드려요" value="${budget || ""}" oninput="onBudgetInput(this.value)" onchange="applyBudget(this.value)" /><span>만 원</span></div>
-        <div class="assume" id="budgetAssume">${budget > 0 ? BUDGET_ASSUMPTION : ""}</div>
+        <div class="field"><span>내 예산</span><input id="homeBudget" type="number" inputmode="decimal" step="0.1" min="0" placeholder="예: 95 → 9억 5,000만 원" value="${budgetInputValue()}" oninput="onBudgetInput(this.value)" onchange="applyBudget(this.value)" /><span>천만 원</span></div>
+        <div class="assume"><b class="echo" id="budgetEcho">${budgetEchoText(budget)}</b><span id="budgetAssume">${budget > 0 ? BUDGET_ASSUMPTION : ""}</span></div>
       </div>
       <div class="mapbox" style="margin-top:12px"><div id="map"></div><span class="hint">핀을 누르면 바로 계산해요</span><span class="bcount" id="budgetCount" hidden></span></div>
       <div class="datasrc">${dataSourceText()}</div>

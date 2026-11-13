@@ -1,30 +1,103 @@
 name: 실거래 데이터 갱신
 
+# 실거래 원본은 actions/cache 로 보관하고(매일 최근 3개월·매달 1일 전체만 다시 받음),
+# 결과(data/)는 저장소에 커밋하지 않고 앱과 함께 GitHub Pages 로 바로 배포해요.
+# Settings → Pages → Source 가 "GitHub Actions" 여야 해요.
+
 on:
   schedule:
     - cron: "17 19 * * *"   # 매일 04:17 (한국 시간)
-  workflow_dispatch: {}      # Actions 탭에서 수동 실행
+  workflow_dispatch:
+    inputs:
+      full:
+        description: "12개월 전체 다시 받기"
+        type: boolean
+        default: false
+      max_calls:
+        description: "이번 실행 API 호출 상한 (비우면 하루 상한 9,000회까지)"
+        type: string
+        default: ""
+  push:                      # 앱·파이프라인을 고치면 다시 배포 (같은 날 받은 달은 다시 안 받아서 호출은 거의 없음)
+    branches: [main]
+    paths:
+      - "app/**"
+      - "pipeline/**"
+      - ".github/workflows/update-data.yml"
 
 permissions:
-  contents: write
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
 
 jobs:
-  update:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
         with:
-          node-version: 20
+          node-version: 24
+
+      - name: 테스트 (가짜 API)
+        run: node pipeline/test/run-mock-test.mjs
+
+      - name: 원본 캐시 복원
+        uses: actions/cache/restore@v6
+        with:
+          path: pipeline/cache
+          key: rtms-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: rtms-
+
+      # 단지 좌표(pipeline/apt-points.json)는 3단계에서 넣을 방법을 정해요. 없으면 좌표 없이 진행돼요.
+
       - name: 실거래 수집·집계
         env:
           DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
-          VWORLD_KEY: ${{ secrets.VWORLD_KEY }}
-        run: node pipeline/build-data.mjs
-      - name: 바뀐 데이터 커밋
+          FULL: ${{ inputs.full && '--full' || '' }}
+          MAX_CALLS: ${{ inputs.max_calls }}
         run: |
-          git config user.name "data-bot"
-          git config user.email "data-bot@users.noreply.github.com"
-          git add data/complexes.json pipeline/geo-cache.json
-          git diff --cached --quiet || git commit -m "실거래 데이터 갱신 $(date -u +%Y-%m-%d)"
-          git push
+          if [[ -n "$MAX_CALLS" && ! "$MAX_CALLS" =~ ^[0-9]+$ ]]; then echo "max_calls 는 숫자만 넣어 주세요"; exit 1; fi
+          node pipeline/build-data.mjs $FULL ${MAX_CALLS:+--max-calls "$MAX_CALLS"}
+
+      - name: 원본 캐시 저장 (실패해도 저장해서 다음 실행에서 이어 받기)
+        if: always() && hashFiles('pipeline/cache/**') != ''
+        uses: actions/cache/save@v6
+        with:
+          path: pipeline/cache
+          key: rtms-${{ github.run_id }}-${{ github.run_attempt }}
+
+      - name: 최근 실행 기록
+        if: always() && hashFiles('pipeline/cache/runs.jsonl') != ''
+        run: tail -n 3 pipeline/cache/runs.jsonl
+
+      - name: 배포 파일 만들기
+        run: |
+          mkdir -p _site
+          cp -r app _site/app
+          cp -r data _site/data
+          cat > _site/index.html <<'EOF'
+          <!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=app/"><title>이 집 얼마 들어?</title><a href="app/">앱으로 이동</a>
+          EOF
+          echo "시군구 파일 $(ls _site/data/complexes | wc -l)개 · 전체 $(du -sh _site | cut -f1)"
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}app/
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

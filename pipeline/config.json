@@ -1,0 +1,8 @@
+{
+  "months": 12,
+  "regions": [
+    { "lawdCd": "41360", "sido": "경기도", "sigungu": "남양주시", "label": "남양주" },
+    { "lawdCd": "41310", "sido": "경기도", "sigungu": "구리시", "label": "구리" },
+    { "lawdCd": "41450", "sido": "경기도", "sigungu": "하남시", "label": "하남" }
+  ]
+}

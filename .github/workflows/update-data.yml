@@ -1,0 +1,30 @@
+name: 실거래 데이터 갱신
+
+on:
+  schedule:
+    - cron: "17 19 * * *"   # 매일 04:17 (한국 시간)
+  workflow_dispatch: {}      # Actions 탭에서 수동 실행
+
+permissions:
+  contents: write
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: 실거래 수집·집계
+        env:
+          DATA_GO_KR_KEY: ${{ secrets.DATA_GO_KR_KEY }}
+          VWORLD_KEY: ${{ secrets.VWORLD_KEY }}
+        run: node pipeline/build-data.mjs
+      - name: 바뀐 데이터 커밋
+        run: |
+          git config user.name "data-bot"
+          git config user.email "data-bot@users.noreply.github.com"
+          git add data/complexes.json pipeline/geo-cache.json
+          git diff --cached --quiet || git commit -m "실거래 데이터 갱신 $(date -u +%Y-%m-%d)"
+          git push

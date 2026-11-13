@@ -1,0 +1,1465 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>이 집 얼마 들어?</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+  :root{--blue:#3182F6;--blue-d:#1B64DA;--blue-l:#E8F3FF;--bg:#F2F4F6;--text:#191F28;--sub:#4E5968;--muted:#8B95A1;--line:#E5E8EB;--red:#F04452;--red-l:#FFEEEE;--green:#03B26C;--green-l:#E5F8EF;--amber:#C27803;--amber-l:#FFF6E0}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Noto Sans KR',-apple-system,sans-serif;-webkit-tap-highlight-color:transparent}
+  body{background:#E5E8EB;color:var(--text)}
+  button{border:none;background:none;cursor:pointer;color:inherit;font:inherit}
+  input{font:inherit;color:inherit}
+  .app{max-width:440px;min-height:100vh;margin:0 auto;background:#fff;position:relative;display:flex;flex-direction:column}
+  .top{position:sticky;top:0;z-index:10;background:#fff;height:56px;display:flex;align-items:center;padding:0 8px;gap:4px}
+  .top .back{width:40px;height:40px;border-radius:12px;font-size:22px;color:var(--sub)}
+  .top .back:hover{background:var(--bg)}
+  .top .ttl{font-weight:700;font-size:16px;flex:1}
+  .top .cmp{font-size:13px;font-weight:700;background:var(--bg);padding:7px 12px;border-radius:999px}
+  .top .cmp b{color:var(--blue)}
+  .prog{height:3px;background:var(--line);margin:0 20px;border-radius:3px;overflow:hidden}
+  .prog i{display:block;height:100%;background:var(--blue);transition:width .25s}
+  .body{flex:1;padding:20px 20px 120px}
+  h1{font-size:24px;font-weight:800;line-height:1.38;letter-spacing:-.02em}
+  h1 em{font-style:normal;color:var(--blue)}
+  .lead{font-size:15px;color:var(--sub);margin-top:6px}
+  .muted{color:var(--muted);font-size:13px}
+  .sec{margin-top:28px}
+  .sec-t{font-size:15px;font-weight:700;margin-bottom:10px}
+  .search{width:100%;margin-top:20px;background:var(--bg);border:none;border-radius:14px;padding:14px 16px;font-size:16px;outline:none}
+  .search:focus{box-shadow:0 0 0 2px var(--blue)}
+  .note{display:inline-block;margin-top:12px;font-size:12px;font-weight:700;color:var(--amber);background:var(--amber-l);padding:4px 8px;border-radius:6px}
+  .card{display:block;width:100%;text-align:left;padding:16px 4px;border-bottom:1px solid var(--line)}
+  .card:hover{background:#FAFBFC}
+  .card .row{display:flex;justify-content:space-between;align-items:flex-end;gap:12px}
+  .card .nm{font-size:16px;font-weight:700}
+  .card .meta{font-size:13px;color:var(--muted);margin-top:3px}
+  .card .pr{font-size:17px;font-weight:800;white-space:nowrap}
+  .card .pr small{display:block;text-align:right;font-size:12px;font-weight:500;color:var(--muted)}
+  .chips{display:flex;gap:8px;flex-wrap:wrap}
+  .chip{padding:9px 14px;border-radius:999px;background:var(--bg);font-size:14px;font-weight:700;color:var(--sub)}
+  .chip.on{background:var(--text);color:#fff}
+  .chip.sm{padding:6px 11px;font-size:13px}
+  .bigprice{font-size:30px;font-weight:800;letter-spacing:-.02em;margin-top:6px}
+  .field{display:flex;align-items:center;background:var(--bg);border-radius:14px;padding:4px 16px;margin-top:12px}
+  .field input{flex:1;border:none;background:none;font-size:18px;font-weight:700;padding:12px 0;outline:none;min-width:0}
+  .field span{font-size:15px;font-weight:700;color:var(--sub)}
+  .field:focus-within{box-shadow:0 0 0 2px var(--blue)}
+  .info{background:var(--bg);border-radius:14px;padding:14px 16px;font-size:14px;color:var(--sub);line-height:1.6}
+  .info b{color:var(--text)}
+  .opts{display:grid;gap:10px}
+  .opt{display:flex;align-items:center;gap:14px;padding:16px;border-radius:16px;border:1.5px solid var(--line);text-align:left;width:100%}
+  .opt .ic{font-size:26px}
+  .opt .t{font-size:16px;font-weight:700}
+  .opt .d{font-size:13px;color:var(--muted);margin-top:2px}
+  .opt.on{border-color:var(--blue);background:var(--blue-l)}
+  .seg{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;background:var(--bg);border-radius:12px;padding:4px}
+  .seg button{padding:10px;border-radius:9px;font-size:14px;font-weight:700;color:var(--muted)}
+  .seg button.on{background:#fff;color:var(--text);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
+  .tile{border-radius:14px;padding:12px 4px;background:var(--bg);text-align:center;border:1.5px solid transparent}
+  .tile .e{font-size:24px;filter:grayscale(1);opacity:.5}
+  .tile .n{font-size:13px;font-weight:700;margin-top:4px;color:var(--muted)}
+  .tile .a{font-size:12px;color:var(--muted);margin-top:2px}
+  .tile.on{background:var(--blue-l);border-color:var(--blue)}
+  .tile.on .e{filter:none;opacity:1}
+  .tile.on .n{color:var(--text)}
+  .tile.on .a{color:var(--blue);font-weight:700}
+  .switchrow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:14px 0}
+  .sw{width:46px;height:28px;border-radius:999px;background:#D1D6DB;position:relative;flex-shrink:0;transition:.2s}
+  .sw::after{content:"";position:absolute;width:22px;height:22px;border-radius:50%;background:#fff;top:3px;left:3px;transition:.2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+  .sw.on{background:var(--blue)}
+  .sw.on::after{left:21px}
+  .cta{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:440px;padding:12px 20px 20px;background:linear-gradient(transparent,#fff 30%);z-index:20}
+  .cta .live{display:flex;justify-content:space-between;font-size:14px;color:var(--sub);margin-bottom:10px;padding:0 4px}
+  .cta .live b{color:var(--text);font-size:16px}
+  .btn{width:100%;padding:16px;border-radius:16px;background:var(--blue);color:#fff;font-size:17px;font-weight:700}
+  .btn:hover{background:var(--blue-d)}
+  .btn.gray{background:var(--bg);color:var(--text)}
+  .btns{display:grid;grid-template-columns:1fr 2fr;gap:8px}
+  .hero{padding:4px 0 8px}
+  .hero .tag{font-size:13px;font-weight:700;color:var(--muted)}
+  .hero .big{font-size:26px;font-weight:800;line-height:1.38;margin-top:8px;letter-spacing:-.02em}
+  .hero .big em{font-style:normal;color:var(--blue)}
+  .sum{margin-top:18px;border-radius:16px;background:var(--bg);padding:16px}
+  .sum .l{display:flex;justify-content:space-between;font-size:15px;padding:4px 0;color:var(--sub)}
+  .sum .l b{color:var(--text)}
+  .sum .tot{border-top:1px solid #D9DDE1;margin-top:8px;padding-top:12px;font-size:17px;font-weight:800;color:var(--text)}
+  .pill{margin-top:12px;border-radius:14px;padding:14px 16px;font-size:15px;font-weight:700}
+  .pill.ok{background:var(--green-l);color:#027A4A}
+  .pill.no{background:var(--red-l);color:#C8212F}
+  .pill.warn{background:var(--red-l);color:#C8212F;font-size:14px;font-weight:500;line-height:1.55}
+  .pill small{display:block;font-weight:500;font-size:13px;opacity:.85;margin-top:2px}
+  .bar{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:14px 0 10px;background:var(--bg)}
+  .grp{border-bottom:1px solid var(--line)}
+  .grp-h{display:flex;width:100%;align-items:center;gap:10px;padding:16px 0;text-align:left}
+  .dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
+  .grp-h .n{flex:1;font-size:16px;font-weight:700}
+  .grp-h .v{font-size:16px;font-weight:800}
+  .grp-h .ar{color:var(--muted);font-size:12px;width:14px;text-align:center}
+  .grp-b{padding:0 0 14px 20px}
+  .it{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 0;font-size:14px}
+  .it .k{color:var(--sub)}
+  .it .k small{display:block;font-size:12px;color:var(--muted)}
+  .it .r{display:flex;align-items:center;gap:8px;flex-shrink:0}
+  .amt{font-weight:700;border-bottom:1px dashed var(--muted);padding:1px 0}
+  .amt.fixed{border:none}
+  .amt.off{color:var(--muted);text-decoration:line-through}
+  .mini-in{width:84px;border:none;background:var(--bg);border-radius:8px;padding:6px 8px;text-align:right;font-weight:700;outline:2px solid var(--blue)}
+  .sw.s{width:38px;height:22px}
+  .sw.s::after{width:16px;height:16px}
+  .sw.s.on::after{left:19px}
+  .link{color:var(--blue);font-weight:700;font-size:14px}
+  .cmpgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:18px}
+  .cbox{border-radius:16px;background:var(--bg);padding:16px;position:relative}
+  .cbox.win{background:var(--blue-l);box-shadow:inset 0 0 0 2px var(--blue)}
+  .cbox .lab{font-size:12px;font-weight:800;color:var(--muted)}
+  .cbox.win .lab{color:var(--blue)}
+  .cbox .nm{font-size:15px;font-weight:700;margin-top:4px;line-height:1.35}
+  .cbox .sub{font-size:12px;color:var(--muted);margin-top:2px}
+  .cbox .l{display:flex;justify-content:space-between;font-size:13px;margin-top:10px;color:var(--sub)}
+  .cbox .l b{color:var(--text)}
+  .cbox .tt{margin-top:12px;padding-top:10px;border-top:1px solid #D9DDE1;font-size:12px;color:var(--sub)}
+  .cbox .tt b{display:block;font-size:17px;font-weight:800;color:var(--text);margin-top:2px}
+  .cbox .x{position:absolute;top:10px;right:10px;font-size:12px;color:var(--muted);font-weight:700}
+  .drow{display:grid;grid-template-columns:1fr auto auto auto;gap:10px;align-items:center;padding:12px 0;border-bottom:1px solid var(--line);font-size:14px}
+  .drow .v{text-align:right;font-weight:700;min-width:64px}
+  .drow .df{text-align:right;font-weight:800;min-width:72px;font-size:13px}
+  .floatbar{position:fixed;bottom:16px;left:50%;transform:translateX(-50%);width:calc(100% - 32px);max-width:408px;background:var(--text);color:#fff;border-radius:16px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;z-index:20;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+  .floatbar button{background:var(--blue);color:#fff;font-weight:700;font-size:14px;padding:9px 14px;border-radius:10px}
+  .sheet-bg{position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:40}
+  .sheet{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:440px;background:#fff;border-radius:24px 24px 0 0;padding:24px 20px 28px;z-index:41}
+  .toast{position:fixed;bottom:110px;left:50%;transform:translateX(-50%);background:rgba(25,31,40,.92);color:#fff;font-size:14px;font-weight:500;padding:12px 18px;border-radius:12px;z-index:60;max-width:calc(100% - 40px);text-align:center}
+  .empty{text-align:center;padding:48px 0;color:var(--muted);font-size:15px;line-height:1.6}
+  a{color:inherit}
+  .mapbox{position:relative;margin:20px -20px 0;height:300px;background:#E9EEF2}
+  #map{width:100%;height:100%}
+  .mapbox .hint{position:absolute;left:12px;top:12px;z-index:500;background:rgba(255,255,255,.95);padding:6px 10px;border-radius:999px;font-size:12px;font-weight:700;color:var(--sub);box-shadow:0 1px 4px rgba(0,0,0,.12);pointer-events:none}
+  .pin-wrap{background:none;border:none}
+  .pin{position:absolute;left:0;bottom:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;cursor:pointer}
+  .pin b{background:var(--blue);color:#fff;font-size:13px;font-weight:800;padding:5px 9px;border-radius:10px;white-space:nowrap;border:2px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+  .pin b small{display:block;font-size:10px;font-weight:500;opacity:.9;max-width:90px;overflow:hidden;text-overflow:ellipsis}
+  .pin i{width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-top:7px solid var(--blue);margin-top:-1px}
+  .map-far .pin b{font-size:0;padding:0;width:12px;height:12px;border-radius:50%}
+  .map-far .pin b small{display:none}
+  .map-far .pin i{display:none}
+  .budget{margin-top:16px}
+  .budget .field{margin-top:0}
+  .budget .field>span:first-child{margin-right:10px;white-space:nowrap}
+  .budget .assume{font-size:12px;color:var(--muted);margin-top:6px;padding:0 4px}
+  .mapbox .bcount{position:absolute;right:12px;top:12px;z-index:500;background:var(--blue);color:#fff;padding:6px 10px;border-radius:999px;font-size:12px;font-weight:800;box-shadow:0 1px 4px rgba(0,0,0,.12);pointer-events:none}
+  .mapbox .bcount.zero{background:var(--sub)}
+  .pin.out b{background:#B0B8C1;font-size:0;padding:0;width:9px;height:9px;border-radius:50%;border:1.5px solid #fff;box-shadow:none}
+  .pin.out i{display:none}
+  .listhead{font-size:13px;font-weight:700;color:var(--muted);margin-top:16px}
+  .card .meta.ok b{color:var(--blue)}
+  .card .meta.no b{color:var(--red)}
+  .datasrc{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="app" id="app"></div>
+<script>
+// ===================== 설정 =====================
+// DATA_URL: pipeline 이 만든 complexes.json 주소 (비우면 샘플 데이터)
+// VWORLD_KEY: V-World 인증키 (지도 타일). 비우면 개발용 OSM 지도를 씀
+const CONFIG = {
+  DATA_URL: "",
+  VWORLD_KEY: ""
+};
+
+    const CALC_CONFIG_JSON = {
+      version: "2026.11.12-mvp",
+      legalBasis: "지방세법 제11조 (2026년 11월 기준 1주택 취득)",
+      acquisitionTax: {
+        underOrEqual6EokRate: 0.01,
+        over9EokRate: 0.03,
+        slopeFormula: "(priceInEok * 2 / 3 - 3) / 100",
+        localEduTaxRatio: 0.1,
+        ruralSpecialTaxOver85m2: 0.002,
+        firstTimeBuyerMaxDiscountManwon: 200,
+        firstTimeBuyerPriceLimitManwon: 120000
+      },
+      brokerageFeeBrackets: [
+        { maxManwon: 5000, rate: 0.006, capManwon: 25, label: "5천만 원 미만 (0.6%, 한도 25만)" },
+        { maxManwon: 20000, rate: 0.005, capManwon: 80, label: "5천만~2억 미만 (0.5%, 한도 80만)" },
+        { maxManwon: 90000, rate: 0.004, capManwon: null, label: "2억~9억 미만 (0.4%)" },
+        { maxManwon: 120000, rate: 0.005, capManwon: null, label: "9억~12억 미만 (0.5%)" },
+        { maxManwon: 150000, rate: 0.006, capManwon: null, label: "12억~15억 미만 (0.6%)" },
+        { maxManwon: null, rate: 0.007, capManwon: null, label: "15억 원 이상 (0.7%)" }
+      ],
+      stampTaxContractHalfManwon: [
+        { maxManwon: 10000, buyerHalf: 0, label: "1억 원 이하 (주택 비과세)" },
+        { maxManwon: 100000, buyerHalf: 7.5, label: "1억 초과~10억 이하 (15만 원의 절반)" },
+        { maxManwon: null, buyerHalf: 17.5, label: "10억 원 초과 (35만 원의 절반)" }
+      ],
+      stampTaxLoanHalfManwon: [
+        { maxManwon: 5000, borrowerHalf: 0, label: "5천만 원 이하 (비과세)" },
+        { maxManwon: 10000, borrowerHalf: 3.5, label: "5천만 초과~1억 이하 (7만 원의 절반)" },
+        { maxManwon: 100000, borrowerHalf: 7.5, label: "1억 초과~10억 이하 (15만 원의 절반)" },
+        { maxManwon: null, borrowerHalf: 17.5, label: "10억 원 초과 (35만 원의 절반)" }
+      ],
+      repairBase84m2: {
+        wallpaper: {
+          name: "도배",
+          scaleByArea: true,
+          grades: {
+            standard: { label: "합지", range: "150~220만", defaultManwon: 180 },
+            premium: { label: "실크", range: "250~400만", defaultManwon: 320 }
+          }
+        },
+        flooring: {
+          name: "바닥재",
+          scaleByArea: true,
+          grades: {
+            standard: { label: "장판", range: "200~320만", defaultManwon: 250 },
+            premium: { label: "강마루", range: "380~600만", defaultManwon: 480 }
+          }
+        },
+        sink: {
+          name: "싱크대",
+          scaleByArea: false,
+          grades: {
+            standard: { label: "기본", range: "350~480만", defaultManwon: 400 },
+            premium: { label: "중급", range: "500~700만", defaultManwon: 600 }
+          }
+        },
+        bathroom: {
+          name: "욕실",
+          scaleByArea: false,
+          grades: {
+            standard: { label: "부분 수리", range: "150~300만/개", defaultManwon: 220 },
+            premium: { label: "전체 철거·방수", range: "400~700만/개", defaultManwon: 520 }
+          }
+        },
+        lighting: {
+          name: "조명",
+          scaleByArea: true,
+          grades: {
+            standard: { label: "LED 전체 교체", range: "100~200만", defaultManwon: 150 }
+          }
+        },
+        closet: {
+          name: "붙박이장",
+          scaleByArea: false,
+          grades: {
+            standard: { label: "일반 (10자 기준)", range: "자당 15~20만", defaultManwon: 180 },
+            premium: { label: "고급 (10자 기준)", range: "자당 20~25만", defaultManwon: 240 }
+          }
+        },
+        grout: {
+          name: "줄눈·탄성코트",
+          scaleByArea: true,
+          grades: {
+            standard: { label: "현관·욕실 기본", range: "50~80만", defaultManwon: 65 },
+            premium: { label: "욕실2+베란다 탄성", range: "90~140만", defaultManwon: 110 }
+          }
+        }
+      }
+    };
+
+
+    const COMPLEX_DATABASE = [
+      {
+        id: "galmae-ipark",
+        name: "갈매역아이파크",
+        region: "구리 갈매·인창",
+        address: "경기도 구리시 갈매동 596",
+        builtYear: 2018,
+        households: 1196,
+        lat: 37.642200,
+        lng: 127.127200,
+        pinLabelPrice: "9억",
+        defaultRepairPreset: "partial",
+        sourceTitle: "리치고 · KB부동산 (2026.11)",
+        sourceUrl: "https://m.richgo.ai/realty/danji/a3LTAHS",
+        areas: [
+          {
+            areaM2: 84,
+            supplyPyeong: 34,
+            avgPriceManwon: 90000,
+            txCount12m: 59,
+            lastTxDate: "2026.11.06",
+            lastTxPriceManwon: 93500,
+            lastTxFloor: "11층",
+            floorRange: "11층 ~ 29층",
+            monthlyMgmtManwon: 24,
+            lowTxRecords: []
+          }
+        ]
+      },
+      {
+        id: "inchang-jugong",
+        name: "인창주공 (통합 재건축)",
+        region: "구리 갈매·인창",
+        address: "경기도 구리시 인창동 666-1",
+        builtYear: 1996,
+        households: 1408,
+        lat: 37.610600,
+        lng: 127.138100,
+        pinLabelPrice: "8.85억",
+        defaultRepairPreset: "full",
+        sourceTitle: "재개발닷컴 · 당근부동산 (2026.10)",
+        sourceUrl: "https://jaegebal.com/develops/5506",
+        areas: [
+          {
+            areaM2: 59,
+            supplyPyeong: 24,
+            avgPriceManwon: 77100,
+            txCount12m: 45,
+            lastTxDate: "2026.10.28",
+            lastTxPriceManwon: 79500,
+            lastTxFloor: "7층",
+            floorRange: "7층 ~ 9층",
+            monthlyMgmtManwon: 18,
+            lowTxRecords: []
+          },
+          {
+            areaM2: 84,
+            supplyPyeong: 33,
+            avgPriceManwon: 88500,
+            txCount12m: 24,
+            lastTxDate: "2026.10.26",
+            lastTxPriceManwon: 88500,
+            lastTxFloor: "7층",
+            floorRange: "7층 ~ 15층",
+            monthlyMgmtManwon: 23,
+            lowTxRecords: []
+          }
+        ]
+      },
+      {
+        id: "dasan-prugio",
+        name: "다산푸르지오",
+        region: "남양주 다산",
+        address: "경기도 남양주시 다산동 6163",
+        builtYear: 2021,
+        households: 1614,
+        lat: 37.623593,
+        lng: 127.149287,
+        pinLabelPrice: "8.8억",
+        defaultRepairPreset: "new",
+        sourceTitle: "집판독 · 아파트시세 (2026.10)",
+        sourceUrl: "https://jippandok.com/apt/41360-4024",
+        areas: [
+          {
+            areaM2: 59,
+            supplyPyeong: 24,
+            avgPriceManwon: 88000,
+            txCount12m: 53,
+            lastTxDate: "2026.10.10",
+            lastTxPriceManwon: 90000,
+            lastTxFloor: "24층",
+            floorRange: "5층 ~ 24층",
+            monthlyMgmtManwon: 16,
+            lowTxRecords: []
+          }
+        ]
+      },
+      {
+        id: "dasan-sujain",
+        name: "다산한양수자인리버팰리스",
+        region: "남양주 다산",
+        address: "경기도 남양주시 다산동 6024",
+        builtYear: 2017,
+        households: 640,
+        lat: 37.623754,
+        lng: 127.150148,
+        pinLabelPrice: "11.3억",
+        defaultRepairPreset: "partial",
+        sourceTitle: "리치고 · 아파트시세 (2026.11)",
+        sourceUrl: "https://m.richgo.ai/realty/danji/a0SDUBq",
+        areas: [
+          {
+            areaM2: 74,
+            supplyPyeong: 30,
+            avgPriceManwon: 113000,
+            txCount12m: 35,
+            lastTxDate: "2026.09.18",
+            lastTxPriceManwon: 113000,
+            lastTxFloor: "10층",
+            floorRange: "3층 ~ 15층",
+            monthlyMgmtManwon: 21,
+            lowTxRecords: []
+          },
+          {
+            areaM2: 84,
+            supplyPyeong: 33,
+            avgPriceManwon: 113000,
+            txCount12m: 35,
+            lastTxDate: "2026.11.05",
+            lastTxPriceManwon: 109000,
+            lastTxFloor: "3층",
+            floorRange: "3층 ~ 15층",
+            monthlyMgmtManwon: 24,
+            lowTxRecords: []
+          }
+        ]
+      },
+      {
+        id: "inchang-urbanforet",
+        name: "e편한세상인창어반포레",
+        region: "구리 갈매·인창",
+        address: "경기도 구리시 인창동 320-2",
+        builtYear: 2021,
+        households: 632,
+        lat: 37.602300,
+        lng: 127.140800,
+        pinLabelPrice: "11.8억",
+        defaultRepairPreset: "new",
+        sourceTitle: "KB부동산 · 리치고 (2026.10)",
+        sourceUrl: "https://kbland.kr/se/c/41234",
+        areas: [
+          {
+            areaM2: 59,
+            supplyPyeong: 25,
+            avgPriceManwon: 118000,
+            txCount12m: 205,
+            lastTxDate: "2026.08.20",
+            lastTxPriceManwon: 127000,
+            lastTxFloor: "23층",
+            floorRange: "8층 ~ 23층",
+            monthlyMgmtManwon: 18,
+            lowTxRecords: []
+          },
+          {
+            areaM2: 84,
+            supplyPyeong: 34,
+            avgPriceManwon: 135000,
+            txCount12m: 205,
+            lastTxDate: "2026.10.28",
+            lastTxPriceManwon: 135000,
+            lastTxFloor: "18층",
+            floorRange: "10층 ~ 25층",
+            monthlyMgmtManwon: 24,
+            lowTxRecords: []
+          }
+        ]
+      },
+      {
+        id: "dasan-xi",
+        name: "다산자이아이비플레이스",
+        region: "남양주 다산",
+        address: "경기도 남양주시 다산동 6028",
+        builtYear: 2021,
+        households: 967,
+        lat: 37.626160,
+        lng: 127.149995,
+        pinLabelPrice: "13.25억",
+        defaultRepairPreset: "new",
+        sourceTitle: "집품 · 내집스캔 (2026.11)",
+        sourceUrl: "https://www.naezipscan.com/map/building/c41360120416337",
+        areas: [
+          {
+            areaM2: 84,
+            supplyPyeong: 34,
+            avgPriceManwon: 132500,
+            txCount12m: 56,
+            lastTxDate: "2026.11.02",
+            lastTxPriceManwon: 139500,
+            lastTxFloor: "28층",
+            floorRange: "8층 ~ 40층",
+            monthlyMgmtManwon: 26,
+            lowTxRecords: []
+          },
+          {
+            areaM2: 110,
+            supplyPyeong: 43,
+            avgPriceManwon: 150000,
+            txCount12m: 2,
+            lastTxDate: "2026.10.19",
+            lastTxPriceManwon: 151000,
+            lastTxFloor: "38층",
+            floorRange: "22층 ~ 38층",
+            monthlyMgmtManwon: 33,
+            lowTxRecords: [
+              { date: "2026.10", priceManwon: 151000, floor: "38층", note: "최근 신고가 거래" },
+              { date: "2026.07", priceManwon: 138000, floor: "38층", note: "직전 거래" }
+            ]
+          }
+        ]
+      },
+      {
+        id: "misa-prugio",
+        name: "미사강변푸르지오",
+        region: "하남 미사",
+        address: "경기도 하남시 망월동 1060",
+        builtYear: 2016,
+        households: 1188,
+        lat: 37.563100,
+        lng: 127.192900,
+        pinLabelPrice: "14.8억",
+        defaultRepairPreset: "partial",
+        sourceTitle: "집판독 · 부동산114 (2026.10)",
+        sourceUrl: "https://jippandok.com/apt/41450-317",
+        areas: [
+          {
+            areaM2: 74,
+            supplyPyeong: 30,
+            avgPriceManwon: 127000,
+            txCount12m: 9,
+            lastTxDate: "2026.04.24",
+            lastTxPriceManwon: 127000,
+            lastTxFloor: "8층",
+            floorRange: "8층 ~ 29층",
+            monthlyMgmtManwon: 22,
+            lowTxRecords: []
+          },
+          {
+            areaM2: 84,
+            supplyPyeong: 33,
+            avgPriceManwon: 148000,
+            txCount12m: 9,
+            lastTxDate: "2026.10.08",
+            lastTxPriceManwon: 159000,
+            lastTxFloor: "21층",
+            floorRange: "19층 ~ 21층",
+            monthlyMgmtManwon: 25,
+            lowTxRecords: []
+          }
+        ]
+      }
+    ];
+
+
+    function formatManwonToKorean(manwon) {
+      const val = Math.round(Number(manwon) || 0);
+      if (val === 0) return "0원";
+      const isNeg = val < 0;
+      const abs = Math.abs(val);
+      const eok = Math.floor(abs / 10000);
+      const rem = abs % 10000;
+      let out = "";
+      if (eok > 0) {
+        out += eok.toLocaleString("ko-KR") + "억";
+        if (rem > 0) out += " " + rem.toLocaleString("ko-KR") + "만 원";
+        else out += " 원";
+      } else {
+        out += rem.toLocaleString("ko-KR") + "만 원";
+      }
+      return isNeg ? "-" + out : out;
+    }
+
+    function formatManwonShort(manwon) {
+      const val = Math.round((Number(manwon) || 0) * 10) / 10;
+      if (val === 0) return "0원";
+      return val.toLocaleString("ko-KR") + "만 원";
+    }
+
+
+    function calculateAllCosts(stateSnapshot) {
+      const price = Math.max(0, Number(stateSnapshot.purchasePriceManwon) || 0);
+      const priceInEok = price / 10000;
+      const areaM2 = Number(stateSnapshot.activeAreaM2) || 84;
+
+      // 1) 취득세율 (기획서 5장: 6억 이하 1%, 6~9억 비례식, 9억 초과 3%)
+      let acqTaxRate = 0.01;
+      let acqRateFormulaText = "6억 이하 1.0%";
+      if (price <= 60000) {
+        acqTaxRate = 0.01;
+        acqRateFormulaText = "6억 원 이하 (1.0%)";
+      } else if (price <= 90000) {
+        // 취득세율(%) = (매매가(억 원) * 2 / 3) - 3
+        const pct = (priceInEok * 2) / 3 - 3;
+        acqTaxRate = Math.round(pct * 10000) / 10000 / 100;
+        acqRateFormulaText = `6~9억 비례식 (${(acqTaxRate * 100).toFixed(2)}%)`;
+      } else {
+        acqTaxRate = 0.03;
+        acqRateFormulaText = "9억 원 초과 (3.0%)";
+      }
+
+      const rawAcqTax = Math.round(price * acqTaxRate * 10) / 10;
+      const localEduTaxRate = acqTaxRate * 0.1;
+      const localEduTax = Math.round(price * localEduTaxRate * 10) / 10;
+      const ruralTaxRate = areaM2 > 85 ? 0.002 : 0;
+      const ruralTax = Math.round(price * ruralTaxRate * 10) / 10;
+      // 다주택은 중과 여부(조정지역·주택 수)에 따라 8~12%까지 달라져 MVP에서 계산하지 않음 (기획서 8장: 계산 대신 안내)
+      const acqTaxExcluded = stateSnapshot.homeOwnership === "multi";
+      const totalAcqTaxBeforeDiscount = acqTaxExcluded ? 0 : Math.round((rawAcqTax + localEduTax + ruralTax) * 10) / 10;
+
+      // 생애최초 감면 (최대 200만 원 차감) — 무주택(첫 집)일 때만, 12억 이하
+      let firstTimeDiscount = 0;
+      const firstTimeEligible = stateSnapshot.homeOwnership === "zero" &&
+        price <= CALC_CONFIG_JSON.acquisitionTax.firstTimeBuyerPriceLimitManwon;
+      if (!acqTaxExcluded && stateSnapshot.firstTimeBuyer && firstTimeEligible) {
+        firstTimeDiscount = Math.min(CALC_CONFIG_JSON.acquisitionTax.firstTimeBuyerMaxDiscountManwon, rawAcqTax);
+      }
+      const netAcqTax = Math.max(0, Math.round((totalAcqTaxBeforeDiscount - firstTimeDiscount) * 10) / 10);
+
+      // 2) 중개보수 (기획서 5장 상한요율)
+      let bracket = CALC_CONFIG_JSON.brokerageFeeBrackets[CALC_CONFIG_JSON.brokerageFeeBrackets.length - 1];
+      // maxManwon === null 은 상한 없는 마지막 구간 (JSON 직렬화 시 Infinity → null 문제 방지)
+      for (const b of CALC_CONFIG_JSON.brokerageFeeBrackets) {
+        if (b.maxManwon === null || price < b.maxManwon) {
+          bracket = b;
+          break;
+        }
+      }
+      let legalBrokerFee = Math.round(price * bracket.rate * 10) / 10;
+      if (bracket.capManwon !== null && legalBrokerFee > bracket.capManwon) {
+        legalBrokerFee = bracket.capManwon;
+      }
+      const finalBrokerFee = stateSnapshot.customBrokerFeeManwon !== null
+        ? Math.max(0, Number(stateSnapshot.customBrokerFeeManwon) || 0)
+        : legalBrokerFee;
+      const brokerVat = stateSnapshot.brokerVatEnabled ? Math.round(finalBrokerFee * 0.1 * 10) / 10 : 0;
+
+      // 3) 등기비 (채권할인비 추정 + 법무사 수수료)
+      // 국민주택채권 할인비 단순 추정 (매매가의 약 0.1% 수준) + 법무사 수수료(30~60만 대표값)
+      const estBondDiscount = Math.round(price * 0.001);
+      const estLawyerFee = stateSnapshot.selfRegEnabled ? 0 : (price <= 60000 ? 35 : price <= 120000 ? 45 : 55);
+      const defaultRegFee = estBondDiscount + estLawyerFee;
+      const finalRegFee = stateSnapshot.customRegFeeManwon !== null
+        ? Math.max(0, Number(stateSnapshot.customRegFeeManwon) || 0)
+        : defaultRegFee;
+
+      // 4) 매매계약서 인지세 (매수인 절반 부담)
+      let contractStamp = 0;
+      let contractStampLabel = "";
+      for (const s of CALC_CONFIG_JSON.stampTaxContractHalfManwon) {
+        if (s.maxManwon === null || price <= s.maxManwon) {
+          contractStamp = s.buyerHalf;
+          contractStampLabel = s.label;
+          break;
+        }
+      }
+
+      const group1Total = Math.round((netAcqTax + finalBrokerFee + brokerVat + finalRegFee + contractStamp) * 10) / 10;
+
+      // 그룹 2: 대출 비용
+      const loanAmt = stateSnapshot.hasLoan ? Math.max(0, Number(stateSnapshot.loanAmountManwon) || 0) : 0;
+      let loanStamp = 0;
+      let loanStampLabel = "대출 없음 (0원)";
+      if (stateSnapshot.hasLoan && loanAmt > 0) {
+        for (const s of CALC_CONFIG_JSON.stampTaxLoanHalfManwon) {
+          if (s.maxManwon === null || loanAmt <= s.maxManwon) {
+            loanStamp = s.borrowerHalf;
+            loanStampLabel = s.label;
+            break;
+          }
+        }
+      }
+      const appliedLoanStamp = (stateSnapshot.hasLoan && stateSnapshot.loanStampEnabled) ? loanStamp : 0;
+      const appliedLoanGuarantee = (stateSnapshot.hasLoan && stateSnapshot.loanGuaranteeEnabled)
+        ? Math.max(0, Number(stateSnapshot.loanGuaranteeAmount) || 0)
+        : 0;
+      const appliedPrepayFee = stateSnapshot.prepayFeeEnabled
+        ? Math.max(0, Number(stateSnapshot.prepayFeeAmount) || 0)
+        : 0;
+      const group2Total = Math.round((appliedLoanStamp + appliedLoanGuarantee + appliedPrepayFee) * 10) / 10;
+
+      // 그룹 3: 입주 비용
+      const mgmtDeposit = Math.max(0, Number(stateSnapshot.mgmtDepositAmount) || 0);
+      const cleaningFee = Math.max(0, Number(stateSnapshot.cleaningFeeAmount) || 0);
+      const movingFee = stateSnapshot.movingFeeEnabled ? Math.max(0, Number(stateSnapshot.movingFeeAmount) || 0) : 0;
+      const airconFee = stateSnapshot.airconFeeEnabled ? Math.max(0, Number(stateSnapshot.airconFeeAmount) || 0) : 0;
+      const storageMove = stateSnapshot.storageMoveEnabled ? Math.max(0, Number(stateSnapshot.storageMoveAmount) || 0) : 0;
+      const furniture = stateSnapshot.furnitureEnabled ? Math.max(0, Number(stateSnapshot.furnitureAmount) || 0) : 0;
+      const group3Total = Math.round((mgmtDeposit + cleaningFee + movingFee + airconFee + storageMove + furniture) * 10) / 10;
+
+      // 그룹 4: 수리비 (면적 보정: 선택 면적 ÷ 84, 싱크대·욕실·붙박이장은 개수/자 기준)
+      const areaRatio = areaM2 / 84;
+      const repairBreakdown = [];
+      let calculatedRepairSum = 0;
+
+      for (const [key, cfg] of Object.entries(CALC_CONFIG_JSON.repairBase84m2)) {
+        const itemState = stateSnapshot.repairItems[key] || { enabled: false, grade: "standard", customManwon: null };
+        const gradeObj = cfg.grades[itemState.grade] || cfg.grades.standard;
+        let baseCost = gradeObj.defaultManwon;
+        if (cfg.scaleByArea) {
+          baseCost = Math.round(baseCost * areaRatio);
+        }
+        if (key === "bathroom") {
+          const bathCount = Number(itemState.count) || 2;
+          baseCost = Math.round(gradeObj.defaultManwon * bathCount);
+        }
+        const finalItemCost = itemState.customManwon !== null
+          ? Math.max(0, Number(itemState.customManwon) || 0)
+          : baseCost;
+        if (itemState.enabled) {
+          calculatedRepairSum += finalItemCost;
+        }
+        repairBreakdown.push({
+          key,
+          name: cfg.name,
+          enabled: itemState.enabled,
+          gradeKey: itemState.grade,
+          gradeLabel: gradeObj.label,
+          rangeText: gradeObj.range,
+          scaleByArea: cfg.scaleByArea,
+          count: itemState.count || 1,
+          amountManwon: itemState.enabled ? finalItemCost : 0,
+          defaultComputedManwon: finalItemCost
+        });
+      }
+
+      const group4Total = stateSnapshot.repairOverrideEnabled
+        ? Math.max(0, Number(stateSnapshot.repairOverrideAmount) || 0)
+        : Math.round(calculatedRepairSum);
+
+      const extraCostTotal = Math.round((group1Total + group2Total + group3Total + group4Total) * 10) / 10;
+      const grandTotal = Math.round((price + extraCostTotal) * 10) / 10;
+      const budget = Number(stateSnapshot.budgetManwon) || 0;
+      const budgetDiff = budget > 0 ? Math.round((budget - grandTotal) * 10) / 10 : null;
+
+      // 재산세 과세기준일 판별 (잔금 예정일이 6월 1일 이전/당일이면 매수인 부담)
+      let buyerPaysPropertyTax = true;
+      if (stateSnapshot.closingDate) {
+        const parts = stateSnapshot.closingDate.split("-");
+        if (parts.length === 3) {
+          const month = parseInt(parts[1], 10);
+          const day = parseInt(parts[2], 10);
+          if (month > 6 || (month === 6 && day > 1)) {
+            buyerPaysPropertyTax = false;
+          }
+        }
+      }
+
+      return {
+        price,
+        areaM2,
+        acqTaxRate,
+        acqRateFormulaText,
+        rawAcqTax,
+        localEduTax,
+        ruralTax,
+        totalAcqTaxBeforeDiscount,
+        acqTaxExcluded,
+        firstTimeEligible,
+        firstTimeDiscount,
+        netAcqTax,
+        bracketLabel: bracket.label,
+        legalBrokerFee,
+        finalBrokerFee,
+        brokerVat,
+        defaultRegFee,
+        finalRegFee,
+        estBondDiscount,
+        estLawyerFee,
+        contractStamp,
+        contractStampLabel,
+        group1Total,
+        loanAmt,
+        loanStampLabel,
+        appliedLoanStamp,
+        appliedLoanGuarantee,
+        appliedPrepayFee,
+        group2Total,
+        mgmtDeposit,
+        cleaningFee,
+        movingFee,
+        airconFee,
+        storageMove,
+        furniture,
+        group3Total,
+        repairBreakdown,
+        calculatedRepairSum,
+        group4Total,
+        extraCostTotal,
+        grandTotal,
+        budget,
+        budgetDiff,
+        buyerPaysPropertyTax
+      };
+    }
+
+
+
+// ===================== 데이터 =====================
+let DATA_META = { sample: true };
+
+function prepareComplex(d) {
+  const age = d.builtYear ? new Date().getFullYear() - d.builtYear + 1 : 10;
+  return {
+    ...d,
+    defaultRepairPreset: d.defaultRepairPreset || (age <= 5 ? "new" : age <= 15 ? "partial" : "full"),
+    areas: d.areas.map((a) => ({
+      ...a,
+      supplyPyeong: a.supplyPyeong || Math.round(a.areaM2 * 0.4),
+      monthlyMgmtManwon: a.monthlyMgmtManwon || Math.round(a.areaM2 * 0.28) // 관리비는 실거래에 없어 면적 비례 추정
+    }))
+  };
+}
+
+async function loadData() {
+  if (!CONFIG.DATA_URL) return;
+  try {
+    const res = await fetch(CONFIG.DATA_URL, { cache: "no-cache" });
+    if (!res.ok) throw new Error(res.status);
+    const json = await res.json();
+    if (!Array.isArray(json.complexes) || !json.complexes.length) throw new Error("빈 데이터");
+    COMPLEX_DATABASE.length = 0;
+    COMPLEX_DATABASE.push(...json.complexes.map(prepareComplex));
+    DATA_META = { sample: false, updatedAt: json.updatedAt, period: json.period };
+  } catch (e) {
+    DATA_META = { sample: true, error: true };
+  }
+}
+
+// ===================== 화면 상태 =====================
+const S = {
+  screen: "home",          // home → price → situation → repair → result → compare
+  query: "",
+  danjiId: null,
+  areaIdx: 0,
+  persona: "first",        // first | noFirst | one | multi
+  grade: "standard",       // 수리 자재 등급
+  preset: null,
+  closing: "unknown",      // 잔금일: before(6/1 이전) | after | unknown
+  editing: null,
+  open: { g1: false, g2: false, g3: false, g4: true },
+  slots: { A: null, B: null },
+  askSlot: false
+};
+let E = null;              // 계산 엔진 입력 (calculateAllCosts 형식)
+let budget = 0;            // 단지를 바꿔도 유지
+
+const STEPS = ["price", "situation", "repair"];
+const PERSONA = {
+  first:   { ic: "🌱", t: "생애 첫 집이에요", d: "한 번도 집을 가진 적 없음 · 취득세 최대 200만 원 감면", own: "zero", ft: true },
+  noFirst: { ic: "🏠", t: "지금은 집이 없어요", d: "예전에 집을 가진 적 있음", own: "zero", ft: false },
+  one:     { ic: "🔄", t: "갈아타기예요", d: "지금 집을 팔고 이사 (일시적 2주택)", own: "one", ft: false },
+  multi:   { ic: "🏘️", t: "집이 2채 이상이에요", d: "취득세는 위택스에서 따로 확인해야 해요", own: "multi", ft: false }
+};
+const REPAIR_ICON = { wallpaper: "🧱", flooring: "🪵", sink: "🚰", bathroom: "🚿", lighting: "💡", closet: "🚪", grout: "✨" };
+const PRESETS = {
+  new:  { t: "신축급", on: ["grout"], grade: "standard" },
+  basic:{ t: "기본 손질", on: ["wallpaper", "lighting", "grout"], grade: "standard" },
+  full: { t: "올수리", on: ["wallpaper", "flooring", "sink", "bathroom", "lighting", "closet", "grout"], grade: "premium" }
+};
+const GROUP_COLORS = { g1: "#3182F6", g2: "#8B5CF6", g3: "#03B26C", g4: "#F59E0B" };
+
+const danji = () => COMPLEX_DATABASE.find((d) => d.id === S.danjiId);
+const area = () => danji().areas[S.areaIdx];
+const won = (m) => formatManwonToKorean(m);
+const man = (m) => formatManwonShort(Math.abs(m) >= 100 ? Math.round(m) : m); // 100만 원 이상은 소수점 없이
+
+function repairItemsFor(presetKey, grade) {
+  const p = PRESETS[presetKey];
+  const items = {};
+  Object.keys(CALC_CONFIG_JSON.repairBase84m2).forEach((k) => {
+    items[k] = { enabled: p.on.includes(k), grade, customManwon: null, count: 2 };
+  });
+  return items;
+}
+
+// 단지 연차 → 수리 프리셋 키 (PRESETS)
+const presetKeyFor = (d) => (d.defaultRepairPreset === "full" ? "full" : d.defaultRepairPreset === "new" ? "new" : "basic");
+
+// 면적에 따라 달라지는 엔진 입력값 (startDanji·setArea·예산 역검색 공통)
+function areaCostDefaults(a) {
+  return {
+    activeAreaM2: a.areaM2,
+    purchasePriceManwon: a.avgPriceManwon,
+    mgmtDepositAmount: Math.round(a.monthlyMgmtManwon * 2),
+    cleaningFeeAmount: Math.round(a.supplyPyeong * 1.3),
+    movingFeeAmount: a.areaM2 <= 60 ? 110 : a.areaM2 <= 85 ? 140 : 180
+  };
+}
+
+// calculateAllCosts 입력값(E) 만들기. 계산 화면과 예산 역검색이 같은 함수를 써서 숫자가 항상 같음.
+// options: persona(PERSONA 키, 기본 S.persona) · preset(PRESETS 키, 기본 단지 연차) · grade(기본 프리셋 자재) · budget(기본 budget)
+function buildEngineState(d, a, options = {}) {
+  const presetKey = options.preset || presetKeyFor(d);
+  const grade = options.grade || PRESETS[presetKey].grade;
+  const p = PERSONA[options.persona || S.persona];
+  return {
+    activeDanjiId: d.id, ...areaCostDefaults(a), budgetManwon: options.budget ?? budget,
+    homeOwnership: p.own, firstTimeBuyer: p.ft, closingDate: "",
+    hasLoan: false, loanAmountManwon: 0,
+    customBrokerFeeManwon: null, brokerVatEnabled: true, selfRegEnabled: false, customRegFeeManwon: null,
+    loanStampEnabled: true, loanGuaranteeEnabled: false, loanGuaranteeAmount: 0, prepayFeeEnabled: false, prepayFeeAmount: 0,
+    mgmtDepositMonths: 2,
+    movingFeeEnabled: true,
+    airconFeeEnabled: false, airconCount: 2, airconFeeAmount: 50,
+    storageMoveEnabled: false, storageMoveAmount: 150,
+    furnitureEnabled: false, furnitureAmount: 500,
+    repairOverrideEnabled: false, repairOverrideAmount: 0,
+    repairItems: repairItemsFor(presetKey, grade)
+  };
+}
+
+// options 는 buildEngineState 와 같음. 예산 목록에서 들어오면 BUDGET_OPTIONS 로 같은 가정에서 시작함.
+function startDanji(id, areaIdx, options = {}) {
+  S.danjiId = id;
+  const d = danji();
+  S.areaIdx = areaIdx ?? Math.max(0, d.areas.findIndex((a) => a.areaM2 === 84));
+  if (options.persona) S.persona = options.persona;
+  S.preset = options.preset || presetKeyFor(d);
+  S.grade = options.grade || PRESETS[S.preset].grade;
+  E = buildEngineState(d, area(), { persona: S.persona, preset: S.preset, grade: S.grade });
+  go("price");
+}
+
+function setArea(idx) {
+  S.areaIdx = idx;
+  Object.assign(E, areaCostDefaults(area()));
+  render();
+}
+
+// ===================== 예산 역검색 =====================
+// 가정 고정: 무주택(생애최초 감면 없음) · 대출 없음 · 연차별 기본 프리셋 + 기본 자재 · 입주 비용은 startDanji 기본값
+const BUDGET_OPTIONS = { persona: "noFirst", grade: "standard" };
+const BUDGET_ASSUMPTION = "무주택 · 대출 없음 · 연차별 기본 수리 기준 예상치예요";
+const budgetTotalsCache = new WeakMap(); // 단지 → 면적별 총액. 총액은 예산과 무관해서 단지마다 한 번만 계산
+
+function budgetTotals(d) {
+  let t = budgetTotalsCache.get(d);
+  if (!t) {
+    t = d.areas.map((a, areaIdx) => ({ areaIdx, areaM2: a.areaM2, total: calculateAllCosts(buildEngineState(d, a, BUDGET_OPTIONS)).grandTotal }));
+    budgetTotalsCache.set(d, t);
+  }
+  return t;
+}
+// 총액이 가장 낮은 면적이 대표. 그 면적이 예산 안이면 "예산 안 면적 중 최저"와 같음.
+function budgetMatch(d) {
+  const t = budgetTotals(d);
+  const best = t.reduce((m, x) => (x.total < m.total ? x : m), t[0]);
+  return { d, areaIdx: best.areaIdx, areaM2: best.areaM2, total: best.total, left: budget - best.total, ok: best.total <= budget };
+}
+
+let budgetTimer;
+function onBudgetInput(v) {
+  clearTimeout(budgetTimer);
+  budgetTimer = setTimeout(() => applyBudget(v), 400); // 입력 중에는 멈춘 뒤 한 번만
+}
+function applyBudget(v) {
+  clearTimeout(budgetTimer);
+  const next = Math.max(0, Math.round(+v || 0));
+  if (next === budget) return;
+  budget = next;
+  // 홈 화면을 다시 그리지 않고 필요한 곳만 바꿈 (입력 포커스·지도 위치 유지)
+  const as = document.getElementById("budgetAssume");
+  if (as) as.textContent = budget > 0 ? BUDGET_ASSUMPTION : "";
+  renderHomeList();
+  drawPins();
+}
+
+function go(screen) {
+  S.screen = screen;
+  S.editing = null;
+  render();
+  window.scrollTo(0, 0);
+}
+
+function back() {
+  const order = ["home", "price", "situation", "repair", "result"];
+  if (S.screen === "compare") return go(E ? "result" : "home");
+  const i = order.indexOf(S.screen);
+  go(i > 0 ? order[i - 1] : "home");
+}
+
+let toastTimer;
+function toast(msg) {
+  document.querySelector(".toast")?.remove();
+  const el = document.createElement("div");
+  el.className = "toast";
+  el.textContent = msg;
+  document.body.appendChild(el);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.remove(), 2400);
+}
+
+// ===================== 렌더 =====================
+function render() {
+  const app = document.getElementById("app");
+  const stepIdx = STEPS.indexOf(S.screen);
+  const nSlots = (S.slots.A ? 1 : 0) + (S.slots.B ? 1 : 0);
+  const titles = { home: "이 집 얼마 들어?", price: danji()?.name, situation: danji()?.name, repair: danji()?.name, result: "입주까지 드는 돈", compare: "두 집 비교" };
+  app.innerHTML = `
+    <div class="top">
+      ${S.screen !== "home" ? `<button class="back" onclick="back()" aria-label="뒤로">‹</button>` : `<span style="width:12px"></span>`}
+      <div class="ttl">${titles[S.screen] || ""}</div>
+      ${S.screen !== "compare" ? `<button class="cmp" onclick="go('compare')">비교함 <b>${nSlots}</b></button>` : ""}
+    </div>
+    ${stepIdx >= 0 ? `<div class="prog"><i style="width:${((stepIdx + 1) / 3) * 100}%"></i></div>` : ""}
+    <div class="body">${SCREENS[S.screen]()}</div>
+    ${S.askSlot ? slotSheet() : ""}
+  `;
+  if (S.screen === "home") initMap();
+  else if (mapObj) { mapObj.remove(); mapObj = null; }
+  const ed = document.querySelector("[data-autofocus]");
+  if (ed) { ed.focus(); ed.select(); }
+}
+
+const SCREENS = {
+  home() {
+    const q = S.query.trim();
+    const n = (S.slots.A ? 1 : 0) + (S.slots.B ? 1 : 0);
+    return `
+      <h1>아파트를 찍어보세요.<br><em>입주까지 드는 돈</em>을 계산해드려요.</h1>
+      <div class="budget">
+        <div class="field"><span>내 예산</span><input id="homeBudget" type="number" inputmode="numeric" placeholder="예산 안에 드는 곳만 보여드려요" value="${budget || ""}" oninput="onBudgetInput(this.value)" onchange="applyBudget(this.value)" /><span>만 원</span></div>
+        <div class="assume" id="budgetAssume">${budget > 0 ? BUDGET_ASSUMPTION : ""}</div>
+      </div>
+      <div class="mapbox" style="margin-top:12px"><div id="map"></div><span class="hint">핀을 누르면 바로 계산해요</span><span class="bcount" id="budgetCount" hidden></span></div>
+      <div class="datasrc">${dataSourceText()}</div>
+      <input class="search" style="margin-top:14px" placeholder="단지명이나 동네 (예: 다산, 갈매)" value="${q}" oninput="S.query=this.value;renderHomeList()" />
+      <div id="homeList" style="margin-top:8px">${homeListHtml()}</div>
+      ${n ? `<div class="floatbar"><span>비교함에 <b>${n}</b>곳 담겼어요</span><button onclick="go('compare')">비교 보기</button></div>` : ""}
+    `;
+  },
+
+  price() {
+    const d = danji(), a = area();
+    const low = a.txCount12m < 3 && a.lowTxRecords?.length;
+    return `
+      <h1>얼마에 살 생각이세요?</h1>
+      <p class="lead">${d.region} · ${d.builtYear}년 준공</p>
+      <div class="sec">
+        <div class="sec-t">전용면적</div>
+        <div class="chips">${d.areas.map((x, i) => `<button class="chip ${i === S.areaIdx ? "on" : ""}" onclick="setArea(${i})">${x.areaM2}㎡ <span style="font-weight:500;opacity:.7">${x.supplyPyeong}평</span></button>`).join("")}</div>
+      </div>
+      <div class="sec">
+        <div class="sec-t">매매가</div>
+        <div class="bigprice" id="priceLabel">${won(E.purchasePriceManwon)}</div>
+        <div class="field"><input type="number" inputmode="numeric" value="${E.purchasePriceManwon}" oninput="document.getElementById('priceLabel').textContent=won(+this.value||0)" onchange="E.purchasePriceManwon=Math.max(0,+this.value||0);render()" /><span>만 원</span></div>
+        <div class="chips" style="margin-top:10px">
+          <button class="chip sm" onclick="E.purchasePriceManwon=Math.max(0,E.purchasePriceManwon-1000);render()">−1,000만</button>
+          <button class="chip sm" onclick="E.purchasePriceManwon+=1000;render()">+1,000만</button>
+          ${E.purchasePriceManwon !== a.avgPriceManwon ? `<button class="chip sm" onclick="E.purchasePriceManwon=${a.avgPriceManwon};render()">평균가로</button>` : ""}
+        </div>
+      </div>
+      <div class="sec info">
+        ${low
+          ? `거래가 ${a.txCount12m}건뿐이라 평균 대신 개별 거래를 보여드려요.<br>${a.lowTxRecords.map((r) => `${r.date} · ${r.floor} · <b>${won(r.priceManwon)}</b> <button class="link" onclick="E.purchasePriceManwon=${r.priceManwon};render()">적용</button>`).join("<br>")}`
+          : `${a.periodLabel || "최근 12개월 실거래 평균"} <b>${won(a.avgPriceManwon)}</b> (${a.txCount12m}건)<br>마지막 거래 ${a.lastTxDate} · ${won(a.lastTxPriceManwon)}`}
+        <br><span class="muted">최근 거래는 신고까지 최대 30일 늦게 반영돼요 · 샘플 데이터</span>
+      </div>
+      <div class="cta"><button class="btn" onclick="go('situation')">다음</button></div>
+    `;
+  },
+
+  situation() {
+    const loanOptions = [20000, 30000, 40000].filter((v) => v < E.purchasePriceManwon);
+    return `
+      <h1>어떤 상황인가요?</h1>
+      <p class="lead">세금이 달라져요</p>
+      <div class="sec opts">
+        ${Object.entries(PERSONA).map(([k, p]) => `
+          <button class="opt ${S.persona === k ? "on" : ""}" onclick="setPersona('${k}')">
+            <span class="ic">${p.ic}</span><span><div class="t">${p.t}</div><div class="d">${p.d}</div></span>
+          </button>`).join("")}
+      </div>
+      <div class="sec">
+        <div class="sec-t">대출 받으세요?</div>
+        <div class="seg">
+          <button class="${!E.hasLoan ? "on" : ""}" onclick="E.hasLoan=false;E.loanAmountManwon=0;render()">아니요</button>
+          <button class="${E.hasLoan ? "on" : ""}" onclick="E.hasLoan=true;if(!E.loanAmountManwon)E.loanAmountManwon=${Math.round(E.purchasePriceManwon * 0.4 / 1000) * 1000};render()">네, 받아요</button>
+        </div>
+        ${E.hasLoan ? `
+          <div class="field"><input type="number" inputmode="numeric" value="${E.loanAmountManwon}" onchange="E.loanAmountManwon=Math.max(0,+this.value||0);render()" /><span>만 원</span></div>
+          <div class="chips" style="margin-top:10px">${loanOptions.map((v) => `<button class="chip sm ${E.loanAmountManwon === v ? "on" : ""}" onclick="E.loanAmountManwon=${v};render()">${won(v)}</button>`).join("")}</div>
+          <p class="muted" style="margin-top:8px">대출받을 수 있는 금액은 은행에서 따로 확인하세요.</p>` : ""}
+      </div>
+      <div class="cta"><button class="btn" onclick="go('repair')">다음</button></div>
+    `;
+  },
+
+  repair() {
+    const c = calculateAllCosts(E);
+    const bath = E.repairItems.bathroom;
+    return `
+      <h1>어디를 고칠까요?</h1>
+      <p class="lead">${danji().builtYear}년 준공 단지에 맞춰 골라뒀어요</p>
+      <div class="sec chips">
+        ${Object.entries(PRESETS).map(([k, p]) => `<button class="chip ${S.preset === k && !E.repairOverrideEnabled ? "on" : ""}" onclick="setPreset('${k}')">${p.t}</button>`).join("")}
+      </div>
+      ${E.repairOverrideEnabled ? `
+        <div class="sec info">받은 견적 <b>${won(E.repairOverrideAmount)}</b>으로 계산해요.</div>
+      ` : `
+        <div class="sec tiles">
+          ${c.repairBreakdown.map((r) => `
+            <button class="tile ${r.enabled ? "on" : ""}" onclick="toggleRepair('${r.key}')">
+              <div class="e">${REPAIR_ICON[r.key]}</div><div class="n">${r.name.replace("·탄성코트", "")}</div>
+              <div class="a">${r.enabled ? man(r.amountManwon) : "안 함"}</div>
+            </button>`).join("")}
+        </div>
+        <div class="sec">
+          <div class="sec-t">자재</div>
+          <div class="seg">
+            <button class="${S.grade === "standard" ? "on" : ""}" onclick="setGrade('standard')">기본</button>
+            <button class="${S.grade === "premium" ? "on" : ""}" onclick="setGrade('premium')">고급</button>
+          </div>
+          <p class="muted" style="margin-top:8px">${S.grade === "standard" ? "합지 도배 · 장판 · 기본 싱크대 · 욕실 부분 수리" : "실크 도배 · 강마루 · 중급 싱크대 · 욕실 전체 공사"}</p>
+          ${bath.enabled ? `<div class="chips" style="margin-top:12px"><span class="muted" style="align-self:center">욕실</span>${[1, 2].map((n) => `<button class="chip sm ${bath.count === n ? "on" : ""}" onclick="E.repairItems.bathroom.count=${n};render()">${n}개</button>`).join("")}</div>` : ""}
+        </div>
+      `}
+      <div class="sec switchrow" style="border-top:1px solid var(--line)">
+        <div><div class="sec-t" style="margin:0">받은 견적이 있어요</div><div class="muted">업체 견적 총액으로 바꿔 계산해요</div></div>
+        <button class="sw ${E.repairOverrideEnabled ? "on" : ""}" onclick="E.repairOverrideEnabled=!E.repairOverrideEnabled;if(E.repairOverrideEnabled&&!E.repairOverrideAmount)E.repairOverrideAmount=${Math.round(c.calculatedRepairSum)};render()" aria-label="견적으로 계산"></button>
+      </div>
+      ${E.repairOverrideEnabled ? `<div class="field"><input type="number" inputmode="numeric" value="${E.repairOverrideAmount}" onchange="E.repairOverrideAmount=Math.max(0,+this.value||0);render()" /><span>만 원</span></div>` : ""}
+      <p class="muted" style="margin-top:14px">전용 84㎡ 기준 단가를 면적에 맞춰 바꾼 예상치예요.</p>
+      <div class="cta">
+        <div class="live"><span>수리비</span><b>${won(c.group4Total)}</b></div>
+        <button class="btn" onclick="go('result')">결과 보기</button>
+      </div>
+    `;
+  },
+
+  result() {
+    const c = calculateAllCosts(E);
+    const d = danji();
+    const groups = buildGroups(c);
+    const diff = budget > 0 ? budget - c.grandTotal : null;
+    const cash = Math.max(0, c.grandTotal - c.loanAmt);
+    return `
+      <div class="hero">
+        <div class="tag">${d.name} · ${c.areaM2}㎡ · ${won(c.price)}</div>
+        <div class="big">매매가 외에<br><em>${won(c.extraCostTotal)}</em>이 더 필요해요</div>
+      </div>
+      ${c.acqTaxExcluded ? `<div class="pill warn"><b>취득세가 빠진 금액이에요.</b> 집이 2채 이상이면 취득세가 8~12%까지 올라갈 수 있어 따로 확인해야 해요. <a href="https://www.wetax.go.kr" target="_blank" rel="noopener" style="font-weight:700">위택스 ↗</a></div>` : ""}
+
+      <div class="sum">
+        <div class="l"><span>매매가</span><b>${won(c.price)}</b></div>
+        <div class="l"><span>추가 비용</span><b style="color:var(--blue)">+${won(c.extraCostTotal)}</b></div>
+        <div class="l tot"><span>입주까지 총</span><span>${won(c.grandTotal)}</span></div>
+        ${E.hasLoan ? `<div class="l"><span>대출 빼고 내 돈</span><b>${won(cash)}</b></div>` : ""}
+      </div>
+
+      <div class="field" style="margin-top:12px"><span style="margin-right:10px">내 예산</span><input type="number" inputmode="numeric" placeholder="입력하면 남는 돈을 알려드려요" value="${budget || ""}" onchange="budget=Math.max(0,+this.value||0);render()" /><span>만 원</span></div>
+      ${diff !== null ? (diff >= 0
+        ? `<div class="pill ok">입주까지 쓰고 나면 ${won(diff)}이 남아요</div>`
+        : `<div class="pill no">예산보다 ${won(-diff)}이 모자라요</div>`) : ""}
+
+      <div class="sec">
+        <div class="sec-t">어디에 드는 돈인가요?</div>
+        <div class="bar">${groups.map((g) => `<i style="width:${(g.total / Math.max(1, c.extraCostTotal)) * 100}%;background:${GROUP_COLORS[g.id]}"></i>`).join("")}</div>
+        ${groups.map((g) => groupBlock(g)).join("")}
+      </div>
+
+      <div class="sec">
+        <div class="sec-t">잔금은 언제 치르나요?</div>
+        <div class="chips">
+          <button class="chip sm ${S.closing === "before" ? "on" : ""}" onclick="S.closing='before';render()">6월 1일 이전</button>
+          <button class="chip sm ${S.closing === "after" ? "on" : ""}" onclick="S.closing='after';render()">6월 2일 이후</button>
+        </div>
+        ${S.closing === "before" ? `<div class="info" style="margin-top:10px">그해 재산세는 <b>내가</b> 내요. 7월·9월에 나눠 나와요.</div>` : ""}
+        ${S.closing === "after" ? `<div class="info" style="margin-top:10px">그해 재산세는 <b>파는 사람</b>이 내요. 내년부터 내가 내요.</div>` : ""}
+      </div>
+
+      <p class="muted" style="margin-top:24px;line-height:1.6">모든 금액은 예상치예요. 1주택 기준 세율(2026년 지방세법)로 계산했고, 정확한 세금은 <a href="https://www.wetax.go.kr" target="_blank" rel="noopener" class="link">위택스</a>에서 확인하세요. 금액에 밑줄이 있으면 눌러서 고칠 수 있어요.</p>
+
+      <div class="cta"><div class="btns">
+        <button class="btn gray" onclick="go('home')">다른 집</button>
+        <button class="btn" onclick="saveToCompare()">비교함에 담기</button>
+      </div></div>
+    `;
+  },
+
+  compare() {
+    const { A, B } = S.slots;
+    if (!A || !B) {
+      const one = A || B;
+      return `
+        <h1>두 집을 담으면<br>나란히 비교해드려요</h1>
+        <div class="empty">${one ? `<b style="color:var(--text)">${one.name}</b>을 담았어요.<br>한 곳만 더 담아주세요.` : "아직 담은 집이 없어요."}</div>
+        <div class="cta"><button class="btn" onclick="go('home')">집 고르러 가기</button></div>
+      `;
+    }
+    const a = A.calc, b = B.calc;
+    const pd = b.price - a.price, td = Math.round(b.grandTotal - a.grandTotal);
+    const cheaper = td < 0 ? "B" : td > 0 ? "A" : null;
+    let head;
+    if (pd > 0 && td < 0) head = `매매가는 B가 ${won(pd)} 비싸지만,<br><em>입주까지는 B가 ${won(-td)} 싸요</em>`;
+    else if (pd < 0 && td > 0) head = `매매가는 A가 ${won(-pd)} 비싸지만,<br><em>입주까지는 A가 ${won(td)} 싸요</em>`;
+    else if (cheaper) head = `입주까지 <em>${cheaper}가 ${won(Math.abs(td))} 싸요</em>`;
+    else head = `입주까지 드는 돈이 같아요`;
+    const rows = [["세금·중개", "group1Total"], ["대출", "group2Total"], ["이사·입주", "group3Total"], ["수리", "group4Total"]];
+    const box = (k, s, c) => `
+      <div class="cbox ${cheaper === k ? "win" : ""}">
+        <button class="x" onclick="S.slots.${k}=null;render()">빼기</button>
+        <div class="lab">집 ${k}${cheaper === k ? " · 더 싸요" : ""}</div>
+        <div class="nm">${s.name}</div>
+        <div class="sub">${c.areaM2}㎡ · ${s.repairLabel}</div>
+        <div class="l"><span>매매가</span><b>${won(c.price)}</b></div>
+        <div class="l"><span>추가 비용</span><b>+${won(c.extraCostTotal)}</b></div>
+        <div class="tt">입주까지<b>${won(c.grandTotal)}</b></div>
+      </div>`;
+    return `
+      <h1 style="font-size:22px">${head}</h1>
+      <div class="cmpgrid">${box("A", A, a)}${box("B", B, b)}</div>
+      <div class="sec">
+        <div class="sec-t">어디서 차이가 나나요?</div>
+        <div class="drow muted" style="font-size:12px;padding:6px 0"><span></span><span class="v">A</span><span class="v">B</span><span class="df">B − A</span></div>
+        ${rows.map(([lab, key]) => {
+          const df = Math.round(b[key] - a[key]);
+          return `<div class="drow"><span>${lab}</span><span class="v">${man(a[key])}</span><span class="v">${man(b[key])}</span>
+            <span class="df" style="color:${df < 0 ? "var(--blue)" : df > 0 ? "var(--red)" : "var(--muted)"}">${df === 0 ? "같음" : (df > 0 ? "+" : "−") + man(Math.abs(df))}</span></div>`;
+        }).join("")}
+      </div>
+      ${(a.acqTaxExcluded || b.acqTaxExcluded) ? `<div class="pill warn">다주택 조건으로 계산한 집은 취득세가 빠져 있어요.</div>` : ""}
+      <div class="cta"><button class="btn gray" onclick="go('home')">다른 집 담기</button></div>
+    `;
+  }
+};
+
+function dataSourceText() {
+  if (DATA_META.sample) {
+    return `<span class="note" style="margin:0">${DATA_META.error ? "실거래 데이터를 못 불러와 샘플을 보여줘요" : "샘플 데이터 · 실제 시세와 달라요"}</span><span></span>`;
+  }
+  const d = new Date(DATA_META.updatedAt);
+  return `<span>국토교통부 실거래가 · 최근 ${DATA_META.period?.months || 12}개월</span><span>${d.getMonth() + 1}월 ${d.getDate()}일 갱신</span>`;
+}
+
+// ===================== 지도 (Leaflet + V-World) =====================
+let mapObj = null;
+const repArea = (d) => d.areas.find((a) => a.areaM2 === 84) || d.areas.reduce((m, a) => (a.txCount12m > m.txCount12m ? a : m), d.areas[0]);
+const eok = (m) => (m / 10000).toFixed(m >= 100000 ? 1 : 2).replace(/0+$/, "").replace(/\.$/, "") + "억";
+
+function initMap() {
+  const el = document.getElementById("map");
+  if (!el) return;
+  if (typeof L === "undefined") { el.parentElement.innerHTML = `<div class="empty" style="padding:120px 0">지도를 불러오지 못했어요. 아래 목록에서 골라주세요.</div>`; return; }
+  if (mapObj) { mapObj.remove(); mapObj = null; }
+  mapObj = L.map(el, { zoomControl: false, attributionControl: true });
+  if (CONFIG.VWORLD_KEY) {
+    L.tileLayer(`https://api.vworld.kr/req/wmts/1.0.0/${CONFIG.VWORLD_KEY}/Base/{z}/{y}/{x}.png`, {
+      minZoom: 6, maxZoom: 19, attribution: "© V-World (국토교통부)"
+    }).addTo(mapObj);
+  } else {
+    // 개발용: V-World 키를 넣기 전까지만 사용
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap (개발용)" }).addTo(mapObj);
+  }
+  const withCoords = COMPLEX_DATABASE.filter((d) => Number.isFinite(d.lat) && Number.isFinite(d.lng));
+  pinLayer = L.layerGroup().addTo(mapObj);
+  mapObj.on("moveend", syncZoomClass);
+  mapObj.on("moveend", () => { S.mapView = { c: mapObj.getCenter(), z: mapObj.getZoom() }; });
+  if (S.mapView) mapObj.setView(S.mapView.c, S.mapView.z);
+  else if (withCoords.length) mapObj.fitBounds(L.latLngBounds(withCoords.map((d) => [d.lat, d.lng])).pad(0.15));
+  else mapObj.setView([37.62, 127.15], 12);
+  drawPins();
+}
+
+let pinLayer = null;
+let labeledPins = []; // 가격표로 보이는 핀 좌표 (겹침 판단용)
+const eok1 = (m) => (m / 10000).toFixed(1).replace(/\.0$/, "") + "억"; // 63200 → 6.3억
+
+// 예산이 없으면 평균가 핀, 있으면 예산 안은 입주 총액 핀 · 초과는 회색 점
+function drawPins() {
+  if (!mapObj || !pinLayer) return;
+  pinLayer.clearLayers();
+  labeledPins = [];
+  const withCoords = COMPLEX_DATABASE.filter((d) => Number.isFinite(d.lat) && Number.isFinite(d.lng));
+  const on = budget > 0;
+  let inCount = 0;
+  withCoords.forEach((d) => {
+    let html, onClick, z = 0;
+    if (!on) {
+      html = `<div class="pin"><b>${eok(repArea(d).avgPriceManwon)}</b><i></i></div>`;
+      onClick = () => startDanji(d.id);
+      labeledPins.push(d);
+    } else {
+      const r = budgetMatch(d);
+      if (r.ok) {
+        inCount++;
+        html = `<div class="pin"><b>${eok1(r.total)}</b><i></i></div>`;
+        onClick = () => startDanji(d.id, r.areaIdx, BUDGET_OPTIONS);
+        labeledPins.push(d);
+        z = 1000;
+      } else {
+        html = `<div class="pin out"><b></b></div>`;
+        onClick = () => startDanji(d.id);
+        z = -1000;
+      }
+    }
+    const icon = L.divIcon({ className: "pin-wrap", iconSize: [0, 0], html });
+    L.marker([d.lat, d.lng], { icon, title: d.name, zIndexOffset: z }).addTo(pinLayer).on("click", onClick);
+  });
+  const badge = document.getElementById("budgetCount");
+  if (badge) {
+    badge.hidden = !on;
+    badge.textContent = `예산 안 ${inCount}곳`;
+    badge.classList.toggle("zero", inCount === 0);
+  }
+  syncZoomClass();
+}
+
+// 화면 안 가격표 핀이 40개 이하면 가격표, 많으면 점으로 (겹침 방지)
+function syncZoomClass() {
+  if (!mapObj) return;
+  const bounds = mapObj.getBounds();
+  const visible = labeledPins.filter((d) => bounds.contains([d.lat, d.lng])).length;
+  mapObj.getContainer().classList.toggle("map-far", visible > 40 && mapObj.getZoom() < 15);
+}
+
+function homeListHtml() {
+  const q = S.query.trim();
+  const list = COMPLEX_DATABASE.filter((d) => !q || (d.name + d.address + d.region).includes(q));
+  if (!(budget > 0) || !list.length) return homeList(list);
+  const rows = list.map(budgetMatch);
+  const inside = rows.filter((r) => r.ok).sort((a, b) => a.left - b.left); // 남는 돈 적은 순
+  if (inside.length) return `<div class="listhead">예산에 가까운 순이에요</div>` + inside.map(budgetCard).join("");
+  const nearest = rows.sort((a, b) => b.left - a.left).slice(0, 3); // 가장 적게 모자란 순
+  return `<div class="empty" style="padding:28px 0 4px">예산 안에 드는 단지가 없어요.</div>
+    <div class="listhead">조금만 더 있으면 되는 곳</div>` + nearest.map(budgetCard).join("");
+}
+
+function budgetCard(r) {
+  const gap = Math.round(Math.abs(r.left));
+  return `
+    <button class="card" onclick="startDanji('${r.d.id}', ${r.areaIdx}, BUDGET_OPTIONS)">
+      <div class="nm">${r.d.name}</div>
+      <div class="meta ${r.ok ? "ok" : "no"}">${r.areaM2}㎡ · 입주까지 ${won(r.total)} · <b>${r.ok ? `${won(gap)} 남음` : `${won(gap)} 모자라요`}</b></div>
+    </button>`;
+}
+
+function homeList(list) {
+  if (!list.length) return `<div class="empty">찾는 단지가 없어요.</div>`;
+  return list.map((d) => {
+    const rep = d.areas.find((a) => a.areaM2 === 84) || d.areas[0];
+    return `
+      <button class="card" onclick="startDanji('${d.id}')">
+        <div class="row">
+          <div><div class="nm">${d.name}</div><div class="meta">${d.region} · ${d.builtYear}년 · ${d.areas.map((a) => a.areaM2 + "㎡").join(" ")}</div></div>
+          <div class="pr">${won(rep.avgPriceManwon)}<small>${rep.areaM2}㎡ 평균</small></div>
+        </div>
+      </button>`;
+  }).join("");
+}
+function renderHomeList() {
+  const el = document.getElementById("homeList");
+  if (el) el.innerHTML = homeListHtml();
+}
+
+// ===================== 결과 화면: 그룹·항목 =====================
+// type: fixed(계산값) | edit(눌러서 수정) | toggle(켜고 끄기 + 수정)
+function buildGroups(c) {
+  return [
+    { id: "g1", name: "세금·중개", total: c.group1Total, items: [
+      c.acqTaxExcluded
+        ? { k: "취득세", note: "다주택 · 계산 제외", v: 0, type: "fixed" }
+        : { k: "취득세", note: `세율 ${(c.acqTaxRate * 100).toFixed(2)}% + 지방교육세${c.ruralTax > 0 ? " + 농특세" : ""}`, v: c.totalAcqTaxBeforeDiscount, type: "fixed" },
+      ...(c.firstTimeDiscount > 0 ? [{ k: "생애 첫 집 감면", note: "최대 200만 원", v: -c.firstTimeDiscount, type: "fixed" }] : []),
+      { k: "중개보수", note: E.customBrokerFeeManwon !== null ? "협의한 금액" : "법정 상한 · 협의하면 바꾸세요", v: c.finalBrokerFee, type: "edit", key: "broker" },
+      { k: "중개보수 부가세", note: "일반과세 사무소면 10%", v: c.brokerVat, type: "toggle", on: E.brokerVatEnabled, tkey: "brokerVatEnabled" },
+      { k: "등기비", note: "법무사·채권 · 추정", v: c.finalRegFee, type: "edit", key: "reg" },
+      { k: "인지세", note: "계약서 · 매수인 절반", v: c.contractStamp, type: "fixed" }
+    ]},
+    { id: "g2", name: "대출", total: c.group2Total, items: E.hasLoan
+      ? [{ k: "대출 인지세", note: "은행과 절반씩", v: c.appliedLoanStamp, type: "fixed" }]
+      : [{ k: "대출 없음", note: "", v: 0, type: "fixed" }] },
+    { id: "g3", name: "이사·입주", total: c.group3Total, items: [
+      { k: "선수관리비", note: "관리비 예치금 2개월분", v: c.mgmtDeposit, type: "edit", key: "mgmtDepositAmount" },
+      { k: "입주청소", note: "면적 비례 추정", v: c.cleaningFee, type: "edit", key: "cleaningFeeAmount" },
+      { k: "포장이사", note: "", v: E.movingFeeAmount, type: "toggle", on: E.movingFeeEnabled, tkey: "movingFeeEnabled", key: "movingFeeAmount" },
+      { k: "에어컨 이전설치", note: "2대 기준", v: E.airconFeeAmount, type: "toggle", on: E.airconFeeEnabled, tkey: "airconFeeEnabled", key: "airconFeeAmount" },
+      { k: "가구·가전", note: "", v: E.furnitureAmount, type: "toggle", on: E.furnitureEnabled, tkey: "furnitureEnabled", key: "furnitureAmount" },
+      { k: "보관이사·임시거주", note: "수리 기간에 필요하면", v: E.storageMoveAmount, type: "toggle", on: E.storageMoveEnabled, tkey: "storageMoveEnabled", key: "storageMoveAmount" }
+    ]},
+    { id: "g4", name: "수리", total: c.group4Total, items: E.repairOverrideEnabled
+      ? [{ k: "받은 견적", note: "", v: c.group4Total, type: "fixed" }]
+      : c.repairBreakdown.filter((r) => r.enabled).map((r) => ({ k: r.name, note: r.gradeLabel + (r.key === "bathroom" ? ` · ${r.count}개` : ""), v: r.amountManwon, type: "fixed" })),
+      footer: `<button class="link" onclick="go('repair')">수리 항목 바꾸기 ›</button>` }
+  ];
+}
+
+function groupBlock(g) {
+  const open = S.open[g.id];
+  return `
+    <div class="grp">
+      <button class="grp-h" onclick="S.open.${g.id}=!S.open.${g.id};render()">
+        <span class="dot" style="background:${GROUP_COLORS[g.id]}"></span>
+        <span class="n">${g.name}</span><span class="v">${man(g.total)}</span><span class="ar">${open ? "▲" : "▼"}</span>
+      </button>
+      ${open ? `<div class="grp-b">${g.items.length ? g.items.map(itemRow).join("") : `<div class="it"><span class="k">고칠 곳 없음</span><span>0원</span></div>`}${g.footer || ""}</div>` : ""}
+    </div>`;
+}
+
+function itemRow(it) {
+  const id = it.key || it.tkey;
+  let right;
+  if (it.type === "fixed") {
+    right = `<span class="amt fixed">${it.v < 0 ? "−" + man(-it.v) : man(it.v)}</span>`;
+  } else if (S.editing === id && it.key) {
+    right = `<input class="mini-in" type="number" data-autofocus value="${it.v}" onchange="commitEdit('${it.key}',this.value)" onblur="commitEdit('${it.key}',this.value)" onkeydown="if(event.key==='Enter')this.blur()" />`;
+  } else {
+    const off = it.type === "toggle" && !it.on;
+    const amount = `<button class="amt ${off ? "off" : ""}" ${it.key ? `onclick="S.editing='${it.key}';render()"` : ""}>${man(it.v)}</button>`;
+    right = amount + (it.type === "toggle" ? `<button class="sw s ${it.on ? "on" : ""}" onclick="E.${it.tkey}=!E.${it.tkey};render()" aria-label="${it.k}"></button>` : "");
+  }
+  return `<div class="it"><span class="k">${it.k}${it.note ? `<small>${it.note}</small>` : ""}</span><span class="r">${right}</span></div>`;
+}
+
+function commitEdit(key, val) {
+  if (S.editing === null) return;
+  const v = Math.max(0, +val || 0);
+  if (key === "broker") E.customBrokerFeeManwon = v;
+  else if (key === "reg") E.customRegFeeManwon = v;
+  else E[key] = v;
+  const t = { movingFeeAmount: "movingFeeEnabled", airconFeeAmount: "airconFeeEnabled", furnitureAmount: "furnitureEnabled", storageMoveAmount: "storageMoveEnabled" }[key];
+  if (t) E[t] = true;
+  S.editing = null;
+  render();
+}
+
+// ===================== 조작 =====================
+function setPersona(k) {
+  S.persona = k;
+  E.homeOwnership = PERSONA[k].own;
+  E.firstTimeBuyer = PERSONA[k].ft;
+  render();
+}
+function setPreset(k) {
+  S.preset = k;
+  S.grade = PRESETS[k].grade;
+  E.repairOverrideEnabled = false;
+  E.repairItems = repairItemsFor(k, S.grade);
+  render();
+}
+function toggleRepair(key) {
+  E.repairItems[key].enabled = !E.repairItems[key].enabled;
+  E.repairItems[key].grade = S.grade;
+  S.preset = null;
+  render();
+}
+function setGrade(g) {
+  S.grade = g;
+  Object.values(E.repairItems).forEach((it) => { it.grade = g; });
+  S.preset = null;
+  render();
+}
+
+function repairLabel() {
+  if (E.repairOverrideEnabled) return "받은 견적";
+  if (S.preset) return PRESETS[S.preset].t;
+  const n = Object.values(E.repairItems).filter((i) => i.enabled).length;
+  return n ? `수리 ${n}곳` : "수리 안 함";
+}
+function snapshot() {
+  return { name: danji().name, repairLabel: repairLabel(), calc: calculateAllCosts(E) };
+}
+function saveToCompare() {
+  if (!S.slots.A) { S.slots.A = snapshot(); afterSave("A"); }
+  else if (!S.slots.B) { S.slots.B = snapshot(); afterSave("B"); }
+  else { S.askSlot = true; render(); }
+}
+function replaceSlot(k) {
+  S.slots[k] = snapshot();
+  S.askSlot = false;
+  afterSave(k);
+}
+function afterSave(k) {
+  if (S.slots.A && S.slots.B) go("compare");
+  else { toast(`집 ${k}로 담았어요. 한 곳 더 고르면 비교해드려요.`); go("home"); }
+}
+function slotSheet() {
+  return `
+    <div class="sheet-bg" onclick="S.askSlot=false;render()"></div>
+    <div class="sheet">
+      <div class="sec-t" style="font-size:18px">어느 집과 바꿀까요?</div>
+      <div class="opts" style="margin-top:14px">
+        ${["A", "B"].map((k) => `<button class="opt" onclick="replaceSlot('${k}')"><span class="ic">${k}</span><span><div class="t">${S.slots[k].name}</div><div class="d">입주까지 ${won(S.slots[k].calc.grandTotal)}</div></span></button>`).join("")}
+      </div>
+    </div>`;
+}
+
+document.getElementById("app").innerHTML = `<div class="empty" style="padding-top:200px">불러오는 중…</div>`;
+loadData().then(render);
+</script>
+</body>
+</html>

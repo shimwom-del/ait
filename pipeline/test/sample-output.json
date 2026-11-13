@@ -1,0 +1,62 @@
+{
+ "updatedAt": "2026-11-13T01:32:25.838Z",
+ "source": "국토교통부 아파트 매매 실거래가 상세 자료 (공공데이터포털), 좌표: V-World 지오코더",
+ "period": {
+  "months": 12,
+  "from": "202512",
+  "to": "202611"
+ },
+ "regions": [
+  {
+   "lawdCd": "41360",
+   "label": "남양주"
+  },
+  {
+   "lawdCd": "41310",
+   "label": "구리"
+  },
+  {
+   "lawdCd": "41450",
+   "label": "하남"
+  }
+ ],
+ "complexes": [
+  {
+   "id": "41310-1",
+   "name": "갈매테스트단지",
+   "region": "구리",
+   "lawdCd": "41310",
+   "address": "경기도 구리시 갈매동 665",
+   "builtYear": 2016,
+   "areas": [
+    {
+     "areaM2": 84,
+     "supplyPyeong": 34,
+     "avgPriceManwon": 80125,
+     "txCount12m": 2,
+     "periodLabel": "최근 12개월 실거래 평균",
+     "lastTxDate": "2026.11.20",
+     "lastTxPriceManwon": 81000,
+     "lastTxFloor": "3층",
+     "floorRange": "3층 ~ 15층",
+     "lowTxRecords": [
+      {
+       "date": "2026.11.20",
+       "priceManwon": 81000,
+       "floor": "3층",
+       "note": "개별 거래"
+      },
+      {
+       "date": "2026.11.14",
+       "priceManwon": 79250,
+       "floor": "15층",
+       "note": "개별 거래"
+      }
+     ]
+    }
+   ],
+   "lat": 37.6385,
+   "lng": 127.1235
+  }
+ ]
+}

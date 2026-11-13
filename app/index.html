@@ -187,12 +187,13 @@
 // ===================== 설정 =====================
 // DATA_BASE: pipeline 결과 폴더 주소. index.json 과 complexes/{시군구코드}.json 을 여기서 받음 (비우면 샘플 데이터)
 // VWORLD_KEY: V-World 인증키 (지도 타일). 비우면 개발용 OSM 지도를 씀
-// APP_NAME: 앱인토스 콘솔에 등록한 appName (공유 딥링크 intoss://{APP_NAME}). 비우면 토스 공유 대신 웹 공유·링크 복사
-// SHARE_OG_IMAGE: 토스 공유 링크 미리보기 이미지 주소
+// APP_NAME: 앱인토스 콘솔에 등록한 appName (공유 딥링크 intoss://{APP_NAME}, apps-in-toss.config.ts 와 같아야 함)
+//   토스 공유는 SDK 가 붙은 앱인토스 빌드(toss/bridge.js)에서만 쓰고, 웹(GitHub Pages)에서는 웹 공유·링크 복사
+// SHARE_OG_IMAGE: 토스 공유 링크 미리보기 이미지 주소 (https 절대 경로). 비우면 기본 미리보기
 const CONFIG = {
   DATA_BASE: "https://shimwom-del.github.io/ait/data/",
   VWORLD_KEY: "",
-  APP_NAME: "",        // TODO: 앱인토스 appName
+  APP_NAME: "house-cost",
   SHARE_OG_IMAGE: ""   // TODO: 앱 대표 이미지 주소
 };
 
@@ -1833,10 +1834,28 @@ function readShareHomes(sp) {
   return one ? { compare: false, homes: [one] } : null;
 }
 
+// 공유 링크 쿼리 읽기. 웹은 location.search, 토스 앱은 location.search 가 비어 있으면 진입 스킴(intoss://…?v=1&…)에서 읽음
+// (출시 전 QR 테스트 스킴은 queryParams={"v":"1",…} 처럼 JSON 으로 들어올 수 있어 그것도 풀어 줌)
+function shareParams() {
+  const sp = new URLSearchParams(location.search);
+  if (sp.get("v") || !window.__AIT_SCHEME__) return sp;
+  const uri = String(window.__AIT_SCHEME__() || "");
+  const q = uri.indexOf("?");
+  if (q < 0) return sp;
+  const scheme = new URLSearchParams(uri.slice(q + 1).split("#")[0]);
+  if (!scheme.get("v") && scheme.get("queryParams")) {
+    try {
+      const obj = JSON.parse(scheme.get("queryParams"));
+      return new URLSearchParams(Object.entries(obj).map(([k, v]) => [k, String(v)]));
+    } catch { return sp; }
+  }
+  return scheme;
+}
+
 // 시작할 때 공유 링크로 들어왔으면 그 계산을 엶. 못 찾으면 안내 후 홈
 async function openSharedLink() {
   let sp;
-  try { sp = new URLSearchParams(location.search); } catch { return; }
+  try { sp = shareParams(); } catch { return; }
   const link = readShareHomes(sp);
   if (!link) return;
   try { history.replaceState(null, "", location.pathname + location.hash); } catch {} // 새로고침해도 다시 열리지 않게

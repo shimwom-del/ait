@@ -144,6 +144,7 @@ assert.deepEqual(g.bbox, [37.6385, 127.1235, 37.6385, 127.1235]);
 assert.deepEqual([n.status, n.complexes, n.mapped, n.center, n.bbox], ["ok", 1, 0, null, null], "좌표 없는 시군구는 중심 없음");
 assert.equal(r.summary.unmatched, 1, "매칭 실패 1곳 기록");
 assert.equal(r.out.index.source, "국토교통부 아파트 매매 실거래가 상세 자료 (공공데이터포털) · 좌표: 테스트 좌표");
+assert.equal(r.out.index.pointsSource, "테스트 좌표");
 assert.ok(!existsSync(join(work, "pipeline", "geo-cache.json")), "geo-cache.json 안 만듦");
 const sampleOut = r.out.guri;
 

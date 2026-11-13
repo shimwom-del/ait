@@ -419,6 +419,7 @@ async function main() {
     updatedAt,
     period,
     source: points.source ? `${SOURCE_TEXT} · 좌표: ${points.source}` : SOURCE_TEXT,
+    pointsSource: points.source || null,   // 앱 출처 표시용 (공공누리 1유형: 출처 표시 조건)
     regions: index
   });
   const out = { length: mapped };

@@ -162,7 +162,8 @@
   .listhead{font-size:13px;font-weight:700;color:var(--muted);margin-top:16px}
   .card .meta.ok b{color:var(--blue)}
   .card .meta.no b{color:var(--red)}
-  .datasrc{display:flex;justify-content:space-between;align-items:center;margin-top:12px;font-size:12px;color:var(--muted)}
+  .datasrc{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;row-gap:2px;margin-top:12px;font-size:12px;color:var(--muted)}
+  .datasrc .src2{flex-basis:100%}
 </style>
 </head>
 <body>
@@ -861,7 +862,7 @@ async function loadData() {
     if (!Array.isArray(json.regions) || !json.regions.length) throw new Error("빈 데이터");
     REGION_INDEX = json.regions;
     COMPLEX_DATABASE.length = 0;
-    DATA_META = { sample: false, updatedAt: json.updatedAt, period: json.period };
+    DATA_META = { sample: false, updatedAt: json.updatedAt, period: json.period, pointsSource: json.pointsSource || null };
   } catch (e) {
     DATA_META = { sample: true, error: true };
   }
@@ -1315,7 +1316,8 @@ function dataSourceText() {
     return `<span class="note" style="margin:0">${DATA_META.error ? "실거래 데이터를 못 불러와 샘플을 보여줘요" : "샘플 데이터 · 실제 시세와 달라요"}</span><span></span>`;
   }
   const d = new Date(DATA_META.updatedAt);
-  return `<span>국토교통부 실거래가 · 최근 ${Number(DATA_META.period?.months) || 12}개월</span><span>${d.getMonth() + 1}월 ${d.getDate()}일 갱신</span>`;
+  return `<span>국토교통부 실거래가 · 최근 ${Number(DATA_META.period?.months) || 12}개월</span><span>${d.getMonth() + 1}월 ${d.getDate()}일 갱신</span>`
+    + (DATA_META.pointsSource ? `<span class="src2">단지 위치 · ${esc(DATA_META.pointsSource)}</span>` : "");
 }
 
 // ===================== 지도 (Leaflet + V-World) =====================

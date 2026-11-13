@@ -154,6 +154,8 @@
   .mapbox .bcount.zero{background:var(--sub)}
   .pin.out b{background:#B0B8C1;font-size:0;padding:0;width:9px;height:9px;border-radius:50%;border:1.5px solid #fff;box-shadow:none}
   .pin.out i{display:none}
+  .rc{position:absolute;left:0;top:0;transform:translate(-50%,-50%);background:rgba(49,130,246,.92);color:#fff;border:1.5px solid #fff;border-radius:999px;padding:4px 8px;font-size:11px;font-weight:800;line-height:1.25;white-space:nowrap;text-align:center;box-shadow:0 2px 6px rgba(0,0,0,.25);cursor:pointer}
+  .rc b{display:block;font-size:10px;font-weight:500;opacity:.92}
   .listhead{font-size:13px;font-weight:700;color:var(--muted);margin-top:16px}
   .card .meta.ok b{color:var(--blue)}
   .card .meta.no b{color:var(--red)}
@@ -164,12 +166,16 @@
 <div class="app" id="app"></div>
 <script>
 // ===================== 설정 =====================
-// DATA_URL: pipeline 이 만든 complexes.json 주소 (비우면 샘플 데이터)
+// DATA_BASE: pipeline 결과 폴더 주소. index.json 과 complexes/{시군구코드}.json 을 여기서 받음 (비우면 샘플 데이터)
 // VWORLD_KEY: V-World 인증키 (지도 타일). 비우면 개발용 OSM 지도를 씀
 const CONFIG = {
-  DATA_URL: "https://shimwom-del.github.io/ait/data/complexes.json",
+  DATA_BASE: "https://shimwom-del.github.io/ait/data/",
   VWORLD_KEY: ""
 };
+
+// 외부 데이터(단지 이름·주소 등)를 HTML에 넣을 때 사용
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const jsArg = (v) => esc(JSON.stringify(v)); // onclick="f(${jsArg(id)})"
 
     const CALC_CONFIG_JSON = {
       version: "2026.11.12-mvp",
@@ -784,19 +790,46 @@ function prepareComplex(d) {
   };
 }
 
+// 시작할 때는 index.json(시군구 목록·중심·범위)만 받고, 단지는 지도에 보이는 시군구 파일만 그때그때 받음
+let REGION_INDEX = [];                 // index.json 의 regions
+const regionLoads = new Map();         // 시군구코드 → 받는 중/받은 Promise (같은 파일을 두 번 받지 않음)
+const loadedRegions = new Set();       // 받기를 마친 시군구코드
+const loadedIds = new Set();           // COMPLEX_DATABASE 에 넣은 단지 id
+
 async function loadData() {
-  if (!CONFIG.DATA_URL) return;
+  if (!CONFIG.DATA_BASE) return;
   try {
-    const res = await fetch(CONFIG.DATA_URL, { cache: "no-cache" });
+    const res = await fetch(CONFIG.DATA_BASE + "index.json", { cache: "no-cache" });
     if (!res.ok) throw new Error(res.status);
     const json = await res.json();
-    if (!Array.isArray(json.complexes) || !json.complexes.length) throw new Error("빈 데이터");
+    if (!Array.isArray(json.regions) || !json.regions.length) throw new Error("빈 데이터");
+    REGION_INDEX = json.regions;
     COMPLEX_DATABASE.length = 0;
-    COMPLEX_DATABASE.push(...json.complexes.map(prepareComplex));
     DATA_META = { sample: false, updatedAt: json.updatedAt, period: json.period };
   } catch (e) {
     DATA_META = { sample: true, error: true };
   }
+}
+
+function loadRegion(lawdCd) {
+  if (regionLoads.has(lawdCd)) return regionLoads.get(lawdCd);
+  const p = fetch(`${CONFIG.DATA_BASE}complexes/${encodeURIComponent(lawdCd)}.json`)
+    .then((res) => { if (!res.ok) throw new Error(res.status); return res.json(); })
+    .then((json) => {
+      for (const c of json.complexes || []) {
+        if (loadedIds.has(c.id) || !Number.isFinite(c.lat) || !Number.isFinite(c.lng)) continue;
+        loadedIds.add(c.id);
+        COMPLEX_DATABASE.push(prepareComplex(c));
+      }
+      loadedRegions.add(lawdCd);
+    })
+    .catch((e) => {
+      regionLoads.delete(lawdCd); // 다음에 지도를 움직이면 다시 시도
+      const r = REGION_INDEX.find((x) => x.lawdCd === lawdCd);
+      toast(`${r ? r.label : "일부 지역"} 데이터를 못 불러왔어요`);
+    });
+  regionLoads.set(lawdCd, p);
+  return p;
 }
 
 // ===================== 화면 상태 =====================
@@ -935,7 +968,7 @@ function applyBudget(v) {
   const as = document.getElementById("budgetAssume");
   if (as) as.textContent = budget > 0 ? BUDGET_ASSUMPTION : "";
   renderHomeList();
-  drawPins();
+  refreshMap();
 }
 
 function go(screen) {
@@ -968,7 +1001,8 @@ function render() {
   const app = document.getElementById("app");
   const stepIdx = STEPS.indexOf(S.screen);
   const nSlots = (S.slots.A ? 1 : 0) + (S.slots.B ? 1 : 0);
-  const titles = { home: "이 집 얼마 들어?", price: danji()?.name, situation: danji()?.name, repair: danji()?.name, result: "입주까지 드는 돈", compare: "두 집 비교" };
+  const dn = esc(danji()?.name);
+  const titles = { home: "이 집 얼마 들어?", price: dn, situation: dn, repair: dn, result: "입주까지 드는 돈", compare: "두 집 비교" };
   app.innerHTML = `
     <div class="top">
       ${S.screen !== "home" ? `<button class="back" onclick="back()" aria-label="뒤로">‹</button>` : `<span style="width:12px"></span>`}
@@ -997,7 +1031,7 @@ const SCREENS = {
       </div>
       <div class="mapbox" style="margin-top:12px"><div id="map"></div><span class="hint">핀을 누르면 바로 계산해요</span><span class="bcount" id="budgetCount" hidden></span></div>
       <div class="datasrc">${dataSourceText()}</div>
-      <input class="search" style="margin-top:14px" placeholder="단지명이나 동네 (예: 다산, 갈매)" value="${q}" oninput="S.query=this.value;renderHomeList()" />
+      <input class="search" style="margin-top:14px" placeholder="동네나 단지명 (예: 강남구, 다산)" value="${esc(q)}" oninput="S.query=this.value;renderHomeList()" />
       <div id="homeList" style="margin-top:8px">${homeListHtml()}</div>
       ${n ? `<div class="floatbar"><span>비교함에 <b>${n}</b>곳 담겼어요</span><button onclick="go('compare')">비교 보기</button></div>` : ""}
     `;
@@ -1008,7 +1042,7 @@ const SCREENS = {
     const low = a.txCount12m < 3 && a.lowTxRecords?.length;
     return `
       <h1>얼마에 살 생각이세요?</h1>
-      <p class="lead">${d.region} · ${d.builtYear}년 준공</p>
+      <p class="lead">${esc(d.region)} · ${esc(d.builtYear)}년 준공</p>
       <div class="sec">
         <div class="sec-t">전용면적</div>
         <div class="chips">${d.areas.map((x, i) => `<button class="chip ${i === S.areaIdx ? "on" : ""}" onclick="setArea(${i})">${x.areaM2}㎡ <span style="font-weight:500;opacity:.7">${x.supplyPyeong}평</span></button>`).join("")}</div>
@@ -1025,9 +1059,9 @@ const SCREENS = {
       </div>
       <div class="sec info">
         ${low
-          ? `거래가 ${a.txCount12m}건뿐이라 평균 대신 개별 거래를 보여드려요.<br>${a.lowTxRecords.map((r) => `${r.date} · ${r.floor} · <b>${won(r.priceManwon)}</b> <button class="link" onclick="E.purchasePriceManwon=${r.priceManwon};render()">적용</button>`).join("<br>")}`
+          ? `거래가 ${a.txCount12m}건뿐이라 평균 대신 개별 거래를 보여드려요.<br>${a.lowTxRecords.map((r) => `${esc(r.date)} · ${esc(r.floor)} · <b>${won(r.priceManwon)}</b> <button class="link" onclick="E.purchasePriceManwon=${Number(r.priceManwon) || 0};render()">적용</button>`).join("<br>")}`
           : `${a.periodLabel || "최근 12개월 실거래 평균"} <b>${won(a.avgPriceManwon)}</b> (${a.txCount12m}건)<br>마지막 거래 ${a.lastTxDate} · ${won(a.lastTxPriceManwon)}`}
-        <br><span class="muted">최근 거래는 신고까지 최대 30일 늦게 반영돼요 · 샘플 데이터</span>
+        <br><span class="muted">최근 거래는 신고까지 최대 30일 늦게 반영돼요${DATA_META.sample ? " · 샘플 데이터" : ""}</span>
       </div>
       <div class="cta"><button class="btn" onclick="go('situation')">다음</button></div>
     `;
@@ -1109,7 +1143,7 @@ const SCREENS = {
     const cash = Math.max(0, c.grandTotal - c.loanAmt);
     return `
       <div class="hero">
-        <div class="tag">${d.name} · ${c.areaM2}㎡ · ${won(c.price)}</div>
+        <div class="tag">${esc(d.name)} · ${c.areaM2}㎡ · ${won(c.price)}</div>
         <div class="big">매매가 외에<br><em>${won(c.extraCostTotal)}</em>이 더 필요해요</div>
       </div>
       ${c.acqTaxExcluded ? `<div class="pill warn"><b>취득세가 빠진 금액이에요.</b> 집이 2채 이상이면 취득세가 8~12%까지 올라갈 수 있어 따로 확인해야 해요. <a href="https://www.wetax.go.kr" target="_blank" rel="noopener" style="font-weight:700">위택스 ↗</a></div>` : ""}
@@ -1157,7 +1191,7 @@ const SCREENS = {
       const one = A || B;
       return `
         <h1>두 집을 담으면<br>나란히 비교해드려요</h1>
-        <div class="empty">${one ? `<b style="color:var(--text)">${one.name}</b>을 담았어요.<br>한 곳만 더 담아주세요.` : "아직 담은 집이 없어요."}</div>
+        <div class="empty">${one ? `<b style="color:var(--text)">${esc(one.name)}</b>을 담았어요.<br>한 곳만 더 담아주세요.` : "아직 담은 집이 없어요."}</div>
         <div class="cta"><button class="btn" onclick="go('home')">집 고르러 가기</button></div>
       `;
     }
@@ -1174,7 +1208,7 @@ const SCREENS = {
       <div class="cbox ${cheaper === k ? "win" : ""}">
         <button class="x" onclick="S.slots.${k}=null;render()">빼기</button>
         <div class="lab">집 ${k}${cheaper === k ? " · 더 싸요" : ""}</div>
-        <div class="nm">${s.name}</div>
+        <div class="nm">${esc(s.name)}</div>
         <div class="sub">${c.areaM2}㎡ · ${s.repairLabel}</div>
         <div class="l"><span>매매가</span><b>${won(c.price)}</b></div>
         <div class="l"><span>추가 비용</span><b>+${won(c.extraCostTotal)}</b></div>
@@ -1203,7 +1237,7 @@ function dataSourceText() {
     return `<span class="note" style="margin:0">${DATA_META.error ? "실거래 데이터를 못 불러와 샘플을 보여줘요" : "샘플 데이터 · 실제 시세와 달라요"}</span><span></span>`;
   }
   const d = new Date(DATA_META.updatedAt);
-  return `<span>국토교통부 실거래가 · 최근 ${DATA_META.period?.months || 12}개월</span><span>${d.getMonth() + 1}월 ${d.getDate()}일 갱신</span>`;
+  return `<span>국토교통부 실거래가 · 최근 ${Number(DATA_META.period?.months) || 12}개월</span><span>${d.getMonth() + 1}월 ${d.getDate()}일 갱신</span>`;
 }
 
 // ===================== 지도 (Leaflet + V-World) =====================
@@ -1225,48 +1259,118 @@ function initMap() {
     // 개발용: V-World 키를 넣기 전까지만 사용
     L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap (개발용)" }).addTo(mapObj);
   }
-  const withCoords = COMPLEX_DATABASE.filter((d) => Number.isFinite(d.lat) && Number.isFinite(d.lng));
   pinLayer = L.layerGroup().addTo(mapObj);
-  mapObj.on("moveend", syncZoomClass);
-  mapObj.on("moveend", () => { S.mapView = { c: mapObj.getCenter(), z: mapObj.getZoom() }; });
+  dotRenderer = L.canvas({ padding: 0.3 });
+  mapObj.on("moveend", () => {
+    S.mapView = { c: mapObj.getCenter(), z: mapObj.getZoom() };
+    clearTimeout(moveTimer);
+    moveTimer = setTimeout(refreshMap, 300); // 지도가 멈춘 뒤 한 번만
+  });
   if (S.mapView) mapObj.setView(S.mapView.c, S.mapView.z);
-  else if (withCoords.length) mapObj.fitBounds(L.latLngBounds(withCoords.map((d) => [d.lat, d.lng])).pad(0.15));
-  else mapObj.setView([37.62, 127.15], 12);
-  drawPins();
+  else if (DATA_META.sample) {
+    const pts = COMPLEX_DATABASE.filter(hasCoords);
+    if (pts.length) mapObj.fitBounds(L.latLngBounds(pts.map((d) => [d.lat, d.lng])).pad(0.15));
+    else mapObj.setView([37.62, 127.15], 12);
+  } else mapObj.fitBounds(seoulBounds());
+  refreshMap();
 }
 
-let pinLayer = null;
-let labeledPins = []; // 가격표로 보이는 핀 좌표 (겹침 판단용)
+let pinLayer = null, dotRenderer = null, moveTimer = null;
+let mapMode = "pins";                 // "regions": 시군구 원 · "pins": 단지 핀
+let labeledPins = [];                 // 가격표로 보이는 핀 좌표 (겹침 판단용)
+const REGION_MODE_MIN = 10;           // 화면에 시군구 중심이 10곳 이상 보이면 시군구 원으로
+const DOT_MODE_MIN = 300;             // 화면 안 단지가 300곳을 넘으면 가벼운 점으로
 const eok1 = (m) => (m / 10000).toFixed(1).replace(/\.0$/, "") + "억"; // 63200 → 6.3억
+const hasCoords = (d) => Number.isFinite(d.lat) && Number.isFinite(d.lng);
+const okRegions = () => REGION_INDEX.filter((r) => r.status === "ok" && r.bbox && r.center);
+const bboxBounds = (b) => L.latLngBounds([b[0], b[1]], [b[2], b[3]]);
 
-// 예산이 없으면 평균가 핀, 있으면 예산 안은 입주 총액 핀 · 초과는 회색 점
+function seoulBounds() {
+  const seoul = okRegions().filter((r) => r.sido === "서울특별시");
+  if (!seoul.length) return L.latLngBounds([37.413, 126.734], [37.715, 127.269]);
+  return seoul.reduce((b, r) => b.extend(bboxBounds(r.bbox)), bboxBounds(seoul[0].bbox));
+}
+
+function complexesInView() {
+  if (!mapObj) return [];
+  if (DATA_META.sample) return COMPLEX_DATABASE.filter(hasCoords);
+  const b = mapObj.getBounds().pad(0.05);
+  return COMPLEX_DATABASE.filter((d) => hasCoords(d) && b.contains([d.lat, d.lng]));
+}
+
+// 지도를 움직인 뒤: 멀면 시군구 원, 가까우면 보이는 시군구 파일을 받아 단지 핀
+async function refreshMap() {
+  if (!mapObj) return;
+  if (DATA_META.sample) { mapMode = "pins"; drawPins(); renderHomeList(); return; }
+  const bounds = mapObj.getBounds();
+  const regions = okRegions();
+  const centersInView = regions.filter((r) => bounds.contains(r.center));
+  if (centersInView.length >= REGION_MODE_MIN) {
+    mapMode = "regions";
+    drawRegionCircles(regions.filter((r) => bounds.intersects(bboxBounds(r.bbox))));
+    renderHomeList();
+    return;
+  }
+  mapMode = "pins";
+  const touching = regions.filter((r) => bounds.intersects(bboxBounds(r.bbox)));
+  const missing = touching.filter((r) => !loadedRegions.has(r.lawdCd));
+  drawPins();                          // 이미 받은 것부터 바로 보여줌
+  renderHomeList();
+  if (missing.length) {
+    await Promise.all(missing.map((r) => loadRegion(r.lawdCd)));
+    if (mapObj && mapMode === "pins") { drawPins(); renderHomeList(); }
+  }
+}
+
+function setMapHint(text) {
+  const h = document.querySelector(".mapbox .hint");
+  if (h) h.textContent = text;
+}
+
+// 원 안 이름은 짧게: "서울 강남구" → "강남구", "수원 장안구" → "장안구"
+const shortLabel = (r) => r.label.split(" ").at(-1);
+
+function drawRegionCircles(list) {
+  pinLayer.clearLayers();
+  labeledPins = [];
+  mapObj.getContainer().classList.remove("map-far");
+  for (const r of list) {
+    const icon = L.divIcon({ className: "pin-wrap", iconSize: [0, 0], html: `<div class="rc"><b>${esc(shortLabel(r))}</b>${Number(r.mapped) || 0}곳</div>` });
+    L.marker(r.center, { icon, title: r.label }).addTo(pinLayer).on("click", () => mapObj.fitBounds(bboxBounds(r.bbox)));
+  }
+  setMapHint("원을 누르면 확대해요");
+  const badge = document.getElementById("budgetCount");
+  if (badge) {
+    badge.hidden = !(budget > 0);
+    badge.textContent = "확대하면 예산 안 단지를 보여드려요";
+    badge.classList.add("zero");
+  }
+}
+
+// 예산이 없으면 평균가 핀, 있으면 예산 안은 입주 총액 핀 · 초과는 회색 점. 화면 안 단지만 그림
 function drawPins() {
   if (!mapObj || !pinLayer) return;
   pinLayer.clearLayers();
   labeledPins = [];
-  const withCoords = COMPLEX_DATABASE.filter((d) => Number.isFinite(d.lat) && Number.isFinite(d.lng));
+  setMapHint("핀을 누르면 바로 계산해요");
+  const list = complexesInView();
   const on = budget > 0;
+  const dots = list.length > DOT_MODE_MIN;
   let inCount = 0;
-  withCoords.forEach((d) => {
-    let html, onClick, z = 0;
-    if (!on) {
-      html = `<div class="pin"><b>${eok(repArea(d).avgPriceManwon)}</b><i></i></div>`;
-      onClick = () => startDanji(d.id);
-      labeledPins.push(d);
-    } else {
-      const r = budgetMatch(d);
-      if (r.ok) {
-        inCount++;
-        html = `<div class="pin"><b>${eok1(r.total)}</b><i></i></div>`;
-        onClick = () => startDanji(d.id, r.areaIdx, BUDGET_OPTIONS);
-        labeledPins.push(d);
-        z = 1000;
-      } else {
-        html = `<div class="pin out"><b></b></div>`;
-        onClick = () => startDanji(d.id);
-        z = -1000;
-      }
+  list.forEach((d) => {
+    let r = null;
+    if (on) { r = budgetMatch(d); if (r.ok) inCount++; }
+    const onClick = r?.ok ? () => startDanji(d.id, r.areaIdx, BUDGET_OPTIONS) : () => startDanji(d.id);
+    if (dots) {
+      const color = !on || r.ok ? "#3182F6" : "#B0B8C1";
+      L.circleMarker([d.lat, d.lng], { renderer: dotRenderer, radius: on && !r.ok ? 3 : 5, color: "#fff", weight: 1, fillColor: color, fillOpacity: 1 })
+        .addTo(pinLayer).on("click", onClick);
+      return;
     }
+    let html, z = 0;
+    if (!on) { html = `<div class="pin"><b>${eok(repArea(d).avgPriceManwon)}</b><i></i></div>`; labeledPins.push(d); }
+    else if (r.ok) { html = `<div class="pin"><b>${eok1(r.total)}</b><i></i></div>`; labeledPins.push(d); z = 1000; }
+    else { html = `<div class="pin out"><b></b></div>`; z = -1000; }
     const icon = L.divIcon({ className: "pin-wrap", iconSize: [0, 0], html });
     L.marker([d.lat, d.lng], { icon, title: d.name, zIndexOffset: z }).addTo(pinLayer).on("click", onClick);
   });
@@ -1287,13 +1391,61 @@ function syncZoomClass() {
   mapObj.getContainer().classList.toggle("map-far", visible > 40 && mapObj.getZoom() < 15);
 }
 
+// 받침에 맞는 조사: 강남구는 / 남양주시는 / 강원 고성군은
+const eunNeun = (w) => { const c = String(w).charCodeAt(String(w).length - 1); return w + (c >= 0xac00 && c <= 0xd7a3 && (c - 0xac00) % 28 ? "은" : "는"); };
+
+// 검색에서 시군구를 고르면 그 시군구로 이동 (파일은 refreshMap 이 받음)
+function goRegion(lawdCd) {
+  const r = REGION_INDEX.find((x) => x.lawdCd === lawdCd);
+  if (!r) return;
+  if (!r.bbox || r.status !== "ok") { toast(r.status === "pending" ? `${eunNeun(r.label)} 데이터를 모으는 중이에요` : `${eunNeun(r.label)} 지도에 표시할 단지가 아직 없어요`); return; }
+  S.query = "";
+  const input = document.querySelector(".search");
+  if (input) input.value = "";
+  if (mapObj) mapObj.fitBounds(bboxBounds(r.bbox));
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+const LIST_MAX = 30;
 function homeListHtml() {
   const q = S.query.trim();
-  const list = COMPLEX_DATABASE.filter((d) => !q || (d.name + d.address + d.region).includes(q));
-  if (!(budget > 0) || !list.length) return homeList(list);
+  if (DATA_META.sample) {
+    return complexListHtml(COMPLEX_DATABASE.filter((d) => !q || (d.name + d.address + d.region).includes(q)), false);
+  }
+  if (q) {
+    const regs = REGION_INDEX.filter((r) => `${r.label} ${r.sido} ${r.sigungu}`.includes(q)).slice(0, 10);
+    const cx = COMPLEX_DATABASE.filter((d) => (d.name + d.address + d.region).includes(q));
+    if (!regs.length && !cx.length) return `<div class="empty">찾는 동네나 단지가 없어요.<br><span class="muted">단지는 지도에서 불러온 지역 안에서만 찾아요.</span></div>`;
+    return (regs.length ? `<div class="listhead">동네</div>` + regs.map(regionCard).join("") : "")
+      + (cx.length ? `<div class="listhead">단지</div>` + complexListHtml(cx, true) : "");
+  }
+  if (mapMode === "regions") return `<div class="empty">지도를 확대하거나 동네를 검색해 보세요.</div>`;
+  const inView = complexesInView();
+  if (!inView.length) return `<div class="empty">${regionLoads.size > loadedRegions.size ? "단지를 불러오는 중이에요…" : "이 화면에는 단지가 없어요."}</div>`;
+  return complexListHtml(inView, true);
+}
+
+function regionCard(r) {
+  const sub = r.status === "ok" ? `단지 ${Number(r.mapped) || 0}곳` : "데이터를 모으는 중이에요";
+  return `
+    <button class="card" onclick="goRegion(${jsArg(r.lawdCd)})">
+      <div class="row">
+        <div><div class="nm">${esc(r.label)}</div><div class="meta">${esc([r.sido, r.sigungu].filter(Boolean).join(" "))}</div></div>
+        <div class="pr" style="font-size:14px;font-weight:700;color:var(--sub)">${sub}</div>
+      </div>
+    </button>`;
+}
+
+// 예산이 있으면 예산 목록, 없으면 단지 목록. capped: 최대 LIST_MAX 줄
+function complexListHtml(list, capped) {
+  const more = (n) => (capped && n > LIST_MAX ? `<div class="muted" style="padding:14px 4px">외 ${n - LIST_MAX}곳 · 지도를 확대하면 좁혀서 보여드려요</div>` : "");
+  if (!(budget > 0) || !list.length) {
+    const rows = capped ? [...list].sort((a, b) => b.areas.reduce((s, x) => s + x.txCount12m, 0) - a.areas.reduce((s, x) => s + x.txCount12m, 0)) : list;
+    return homeList(capped ? rows.slice(0, LIST_MAX) : rows) + more(list.length);
+  }
   const rows = list.map(budgetMatch);
   const inside = rows.filter((r) => r.ok).sort((a, b) => a.left - b.left); // 남는 돈 적은 순
-  if (inside.length) return `<div class="listhead">예산에 가까운 순이에요</div>` + inside.map(budgetCard).join("");
+  if (inside.length) return `<div class="listhead">예산에 가까운 순이에요</div>` + (capped ? inside.slice(0, LIST_MAX) : inside).map(budgetCard).join("") + more(inside.length);
   const nearest = rows.sort((a, b) => b.left - a.left).slice(0, 3); // 가장 적게 모자란 순
   return `<div class="empty" style="padding:28px 0 4px">예산 안에 드는 단지가 없어요.</div>
     <div class="listhead">조금만 더 있으면 되는 곳</div>` + nearest.map(budgetCard).join("");
@@ -1302,8 +1454,8 @@ function homeListHtml() {
 function budgetCard(r) {
   const gap = Math.round(Math.abs(r.left));
   return `
-    <button class="card" onclick="startDanji('${r.d.id}', ${r.areaIdx}, BUDGET_OPTIONS)">
-      <div class="nm">${r.d.name}</div>
+    <button class="card" onclick="startDanji(${jsArg(r.d.id)}, ${r.areaIdx}, BUDGET_OPTIONS)">
+      <div class="nm">${esc(r.d.name)}</div>
       <div class="meta ${r.ok ? "ok" : "no"}">${r.areaM2}㎡ · 입주까지 ${won(r.total)} · <b>${r.ok ? `${won(gap)} 남음` : `${won(gap)} 모자라요`}</b></div>
     </button>`;
 }
@@ -1313,9 +1465,9 @@ function homeList(list) {
   return list.map((d) => {
     const rep = d.areas.find((a) => a.areaM2 === 84) || d.areas[0];
     return `
-      <button class="card" onclick="startDanji('${d.id}')">
+      <button class="card" onclick="startDanji(${jsArg(d.id)})">
         <div class="row">
-          <div><div class="nm">${d.name}</div><div class="meta">${d.region} · ${d.builtYear}년 · ${d.areas.map((a) => a.areaM2 + "㎡").join(" ")}</div></div>
+          <div><div class="nm">${esc(d.name)}</div><div class="meta">${esc(d.region)} · ${esc(d.builtYear)}년 · ${d.areas.map((a) => a.areaM2 + "㎡").join(" ")}</div></div>
           <div class="pr">${won(rep.avgPriceManwon)}<small>${rep.areaM2}㎡ 평균</small></div>
         </div>
       </button>`;
@@ -1453,7 +1605,7 @@ function slotSheet() {
     <div class="sheet">
       <div class="sec-t" style="font-size:18px">어느 집과 바꿀까요?</div>
       <div class="opts" style="margin-top:14px">
-        ${["A", "B"].map((k) => `<button class="opt" onclick="replaceSlot('${k}')"><span class="ic">${k}</span><span><div class="t">${S.slots[k].name}</div><div class="d">입주까지 ${won(S.slots[k].calc.grandTotal)}</div></span></button>`).join("")}
+        ${["A", "B"].map((k) => `<button class="opt" onclick="replaceSlot('${k}')"><span class="ic">${k}</span><span><div class="t">${esc(S.slots[k].name)}</div><div class="d">입주까지 ${won(S.slots[k].calc.grandTotal)}</div></span></button>`).join("")}
       </div>
     </div>`;
 }

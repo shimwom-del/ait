@@ -79,10 +79,21 @@ jobs:
         run: tail -n 3 pipeline/cache/runs.jsonl
 
       - name: 배포 파일 만들기
+        env:
+          VWORLD_KEY: ${{ secrets.VWORLD_KEY }}   # 지도 타일 키. 저장소에는 빈 값, 배포본에만 넣음 (V-World 에서 도메인 제한)
         run: |
           mkdir -p _site
           cp -r app _site/app
           cp -r data _site/data
+          node -e '
+            const fs = require("fs"), f = "_site/app/index.html", key = process.env.VWORLD_KEY || "";
+            if (!key) { console.log("VWORLD_KEY 없음 → 개발용 OSM 지도로 배포"); process.exit(0); }
+            if (!/^[A-Za-z0-9-]+$/.test(key)) { console.error("VWORLD_KEY 형식이 이상해요"); process.exit(1); }
+            const html = fs.readFileSync(f, "utf8"), from = "VWORLD_KEY: \"\"";
+            if (!html.includes(from)) { console.error("app/index.html 에서 VWORLD_KEY 자리를 못 찾았어요"); process.exit(1); }
+            fs.writeFileSync(f, html.replace(from, "VWORLD_KEY: \"" + key + "\""));
+            console.log("V-World 지도 키 넣음");
+          '
           cat > _site/index.html <<'EOF'
           <!doctype html><meta charset="utf-8"><meta http-equiv="refresh" content="0; url=app/"><title>이 집 얼마 들어?</title><a href="app/">앱으로 이동</a>
           EOF

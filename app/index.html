@@ -311,6 +311,14 @@ const jsArg = (v) => esc(JSON.stringify(v)); // onclick="f(${jsArg(id)})"
             standard: { label: "3대", range: "350~450만", defaultManwon: 400 },
             premium: { label: "5대", range: "550~700만", defaultManwon: 600 }
           }
+        },
+        interiorFilm: {
+          name: "인테리어 필름",
+          scaleByArea: true,
+          grades: {
+            standard: { label: "몰딩·창틀·가구 문짝 (문·문틀 제외)", range: "200~350만", defaultManwon: 250 },
+            premium: { label: "몰딩·창틀·가구 + 아트월 고급 필름", range: "350~550만", defaultManwon: 450 }
+          }
         }
       }
     };
@@ -907,7 +915,7 @@ const PERSONA = {
 };
 const REPAIR_ICON = {
   wallpaper: "🧱", flooring: "🪵", sink: "🚰", bathroom: "🚿", lighting: "💡", closet: "🗄️", grout: "✨",
-  sash: "🪟", door: "🚪", middleDoor: "🪞", boiler: "🔥", entrance: "👟", systemAc: "❄️"
+  sash: "🪟", door: "🚪", middleDoor: "🪞", boiler: "🔥", entrance: "👟", systemAc: "❄️", interiorFilm: "🖼️"
 };
 // 수리 화면에 먼저 보이는 항목 (나머지는 "더 보기")
 const REPAIR_PRIMARY = ["wallpaper", "flooring", "sink", "bathroom", "sash", "door", "lighting", "grout"];
